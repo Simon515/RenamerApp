@@ -7,8 +7,8 @@ final class FileScannerTests: XCTestCase {
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let items = try await FileScanner().scan(folders: [tmp])
-        XCTAssertEqual(items.count, 0)
+        let result = await FileScanner().scan(folders: [tmp])
+        XCTAssertEqual(result.items.count, 0)
     }
 
     func testScanSkipsHiddenFiles() async throws {
@@ -19,8 +19,8 @@ final class FileScannerTests: XCTestCase {
         try "hello".write(toFile: tmp.appending(path: "visible.txt").path(), atomically: true, encoding: .utf8)
         try "hidden".write(toFile: tmp.appending(path: ".hidden.txt").path(), atomically: true, encoding: .utf8)
 
-        let items = try await FileScanner().scan(folders: [tmp])
-        XCTAssertEqual(items.count, 1)
-        XCTAssertEqual(items.first?.name, "visible.txt")
+        let result = await FileScanner().scan(folders: [tmp])
+        XCTAssertEqual(result.items.count, 1)
+        XCTAssertEqual(result.items.first?.name, "visible.txt")
     }
 }

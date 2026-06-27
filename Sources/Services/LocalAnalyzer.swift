@@ -39,6 +39,7 @@ actor LocalAnalyzer {
             }
         }
 
+        analysis.category = inferLocalCategory(for: item)
         return analysis
     }
 
@@ -69,6 +70,7 @@ actor LocalAnalyzer {
             analysis.confidence = 0.7
         }
 
+        analysis.category = inferLocalCategory(for: item)
         return analysis
     }
 
@@ -85,7 +87,7 @@ actor LocalAnalyzer {
         } else if ["txt", "md", "swift", "py", "json", "csv"].contains(ext) {
             return (try? String(contentsOf: item.url, encoding: .utf8)) ?? ""
         } else if ["docx", "pages", "numbers", "keynote"].contains(ext) {
-            return extractSpotlightText(url: item.url)
+            return await extractSpotlightText(url: item.url)
         }
         return ""
     }
@@ -111,22 +113,28 @@ actor LocalAnalyzer {
         return attributed.string
     }
 
-    /// 通过 Spotlight (`mdls`) 提取文档文本内容，作为 docx/pages/numbers/keynote 的简易回退。
-    private nonisolated func extractSpotlightText(url: URL) -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/mdls")
-        process.arguments = ["-name", "kMDItemTextContent", "-raw", url.path()]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let string = String(data: data, encoding: .utf8) else { return "" }
-            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed == "(null)" ? "" : trimmed
-        } catch {
-            return ""
+    /// 通过 Spotlight (`mdls`) 异步提取文档文本内容，作为 docx/pages/numbers/keynote 的简易回退。
+    private nonisolated func extractSpotlightText(url: URL) async -> String {
+        await withCheckedContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/mdls")
+            process.arguments = ["-name", "kMDItemTextContent", "-raw", url.path()]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.terminationHandler = { _ in
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                guard let string = String(data: data, encoding: .utf8) else {
+                    continuation.resume(returning: "")
+                    return
+                }
+                let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+                continuation.resume(returning: trimmed == "(null)" ? "" : trimmed)
+            }
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(returning: "")
+            }
         }
     }
 
@@ -154,6 +162,19 @@ actor LocalAnalyzer {
 
     private nonisolated func isVideo(ext: String) -> Bool {
         ["mp4", "mov", "m4v", "avi", "mkv", "wmv", "flv", "webm"].contains(ext)
+    }
+
+    /// 基于扩展名推断本地分类，用于在未启用云端增强时填充 `{category}` 模板。
+    private nonisolated func inferLocalCategory(for item: FileItem) -> String? {
+        let ext = item.pathExtension.lowercased()
+        if isImage(ext: ext) { return "Images" }
+        if isVideo(ext: ext) { return "Videos" }
+        if ["pdf", "txt", "md", "rtf", "docx", "pages", "numbers", "keynote", "csv", "json"].contains(ext) {
+            return "Documents"
+        }
+        if ["zip", "rar", "7z", "tar", "gz", "bz2"].contains(ext) { return "Archives" }
+        if ext == "app" { return "Applications" }
+        return nil
     }
 
     /// 使用 ImageIO 提取图片 EXIF/TIFF 等元数据。

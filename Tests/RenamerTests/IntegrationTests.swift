@@ -14,7 +14,8 @@ final class IntegrationTests: XCTestCase {
         let template = NamingTemplate(id: UUID(), name: "default", folderTemplate: "Reports", fileNameTemplate: "{title}")
 
         let scanner = FileScanner()
-        let items = try await scanner.scan(folders: [dir])
+        let scanResult = await scanner.scan(folders: [dir])
+        let items = scanResult.items
         var analyses: [FileAnalysis] = []
         for item in items {
             analyses.append(try await LocalAnalyzer().analyze(item: item))
