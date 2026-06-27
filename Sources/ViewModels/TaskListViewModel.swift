@@ -5,6 +5,11 @@ import SwiftUI
 @Observable
 final class TaskListViewModel {
     var tasks: [OrganizationTask] = []
+    var templates: [NamingTemplate] = [
+        NamingTemplate(id: UUID(), name: "默认", folderTemplate: "{category}", fileNameTemplate: "{date}-{title}"),
+        NamingTemplate(id: UUID(), name: "按日期", folderTemplate: "{date:yyyy}/{date:MM}", fileNameTemplate: "{title}"),
+        NamingTemplate(id: UUID(), name: "按来源", folderTemplate: "{source}", fileNameTemplate: "{date}-{title}")
+    ]
 
     private var storageURL: URL {
         FileManager.default

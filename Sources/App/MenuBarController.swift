@@ -16,7 +16,13 @@ final class MenuBarController {
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 220, height: 160)
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: MenuBarPopover(openMainWindow: openMainWindow))
+        popover.contentViewController = NSHostingController(rootView: MenuBarPopover(
+            openMainWindow: openMainWindow,
+            onPickFolders: { [weak self] urls in
+                self?.popover?.performClose(nil)
+                NotificationCenter.default.post(name: .renamerPickFolders, object: urls)
+            }
+        ))
         self.popover = popover
     }
 

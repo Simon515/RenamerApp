@@ -17,6 +17,17 @@ final class SettingsViewModel {
         ("SiliconFlow", "https://api.siliconflow.cn", "Qwen/Qwen2-7B-Instruct")
     ]
 
+    /// 根据当前输入构造云端配置；字段不完整时返回 nil。
+    var cloudConfiguration: CloudConfiguration? {
+        guard let url = URL(string: cloudBaseURL),
+              !cloudBaseURL.isEmpty,
+              !cloudAPIKey.isEmpty,
+              !cloudModel.isEmpty else {
+            return nil
+        }
+        return CloudConfiguration(baseURL: url, apiKey: cloudAPIKey, model: cloudModel)
+    }
+
     func applyPreset(_ preset: (name: String, baseURL: String, model: String)) {
         cloudBaseURL = preset.baseURL
         cloudModel = preset.model

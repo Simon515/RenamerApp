@@ -7,23 +7,23 @@ final class MainViewModel {
     var plan: OrganizationPlan?
     var isAnalyzing = false
     var errorMessage: String?
+    var settings: SettingsViewModel?
+
+    var cloudConfig: CloudConfiguration?
 
     private let scanner = FileScanner()
     private let localAnalyzer = LocalAnalyzer()
     private let duplicateDetector = DuplicateDetector()
 
-    struct CloudConfiguration: Sendable {
-        let baseURL: URL
-        let apiKey: String
-        let model: String
-    }
-
-    var cloudConfig: CloudConfiguration?
-
     func analyze(folders: [URL], task: OrganizationTask?, template: NamingTemplate, destination: URL, operation: CopyOrMove = .copy) async {
         isAnalyzing = true
         defer { isAnalyzing = false }
         do {
+            // 每次分析前同步设置中的云端配置。
+            if let settings {
+                cloudConfig = settings.cloudConfiguration
+            }
+
             let items = try await scanner.scan(folders: folders)
             var analyses: [FileAnalysis] = []
             var textsByID: [UUID: String] = [:]
@@ -48,30 +48,44 @@ final class MainViewModel {
                 }
             }
 
-            if failureCount > 0 {
-                errorMessage = "\(failureCount) files could not be analyzed"
-            }
-
+            var cloudFailureCount = 0
             if task?.useCloudAI == true, let config = cloudConfig {
                 let cloudAnalyzer = CloudAnalyzer(baseURL: config.baseURL, apiKey: config.apiKey, model: config.model)
                 for i in analyses.indices {
                     let text = textsByID[analyses[i].id] ?? ""
-                    if let enhanced = try? await cloudAnalyzer.enhance(analyses[i], text: text) {
+                    do {
+                        let enhanced = try await cloudAnalyzer.enhance(analyses[i], text: text)
                         analyses[i] = enhanced
+                    } catch {
+                        cloudFailureCount += 1
                     }
                 }
             }
 
-            let duplicates = try await duplicateDetector.detectDuplicates(in: items)
+            let detectionResult = await duplicateDetector.detectDuplicates(in: items)
             let engine = NamingEngine(template: template, destination: destination)
             plan = try engine.buildPlan(
                 taskID: task?.id,
                 items: items,
                 analyses: analyses,
-                duplicateGroups: duplicates,
+                duplicateGroups: detectionResult.groups,
                 exportTargets: task?.exportTargets ?? [],
                 operation: task?.operation ?? operation
             )
+
+            var messages: [String] = []
+            if failureCount > 0 {
+                messages.append("\(failureCount) files could not be analyzed")
+            }
+            if detectionResult.inaccessibleCount > 0 {
+                messages.append("\(detectionResult.inaccessibleCount) files could not be hashed for duplicate detection")
+            }
+            if cloudFailureCount > 0 {
+                messages.append("Cloud enhancement failed for \(cloudFailureCount) files")
+            }
+            if !messages.isEmpty {
+                errorMessage = messages.joined(separator: "\n")
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

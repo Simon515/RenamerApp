@@ -1,21 +1,33 @@
 import Foundation
 import CryptoKit
 
+/// 重复文件检测结果。
+struct DuplicateDetectionResult: Sendable {
+    let groups: [DuplicateGroup]
+    let inaccessibleCount: Int
+}
+
 /// 通过文件内容 SHA-256 哈希检测重复文件。
 actor DuplicateDetector {
     /// 在传入的文件列表中检测内容完全相同的文件。
     /// - Parameter items: 待检测的 `FileItem` 数组。
-    /// - Returns: 按哈希字符串排序的重复文件组；无重复文件时返回空数组。
-    func detectDuplicates(in items: [FileItem]) async throws -> [DuplicateGroup] {
+    /// - Returns: 重复文件组以及无法读取的文件数量；单个文件读取失败不会中断整个批次。
+    func detectDuplicates(in items: [FileItem]) async -> DuplicateDetectionResult {
         var groups: [String: [FileItem]] = [:]
+        var inaccessibleCount = 0
         for item in items {
-            let hash = try hashFile(at: item.url)
-            groups[hash, default: []].append(item)
+            do {
+                let hash = try hashFile(at: item.url)
+                groups[hash, default: []].append(item)
+            } catch {
+                inaccessibleCount += 1
+            }
         }
-        return groups
+        let duplicateGroups = groups
             .filter { $0.value.count > 1 }
             .map { DuplicateGroup(id: UUID(), hash: $0.key, items: $0.value, keepIndex: 0) }
             .sorted { $0.hash < $1.hash }
+        return DuplicateDetectionResult(groups: duplicateGroups, inaccessibleCount: inaccessibleCount)
     }
 
     /// 计算指定文件的 SHA-256 哈希值。

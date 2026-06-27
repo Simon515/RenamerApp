@@ -18,8 +18,19 @@ final class DuplicateDetectorTests: XCTestCase {
             FileItem(id: UUID(), url: b, name: "b.txt", pathExtension: "txt", size: 0, creationDate: nil, modificationDate: nil, contentType: nil)
         ]
 
-        let groups = try await DuplicateDetector().detectDuplicates(in: items)
-        XCTAssertEqual(groups.count, 1)
-        XCTAssertEqual(groups.first?.items.count, 2)
+        let result = await DuplicateDetector().detectDuplicates(in: items)
+        XCTAssertEqual(result.groups.count, 1)
+        XCTAssertEqual(result.groups.first?.items.count, 2)
+        XCTAssertEqual(result.inaccessibleCount, 0)
+    }
+
+    func testSkipsUnreadableFiles() async {
+        let items = [
+            FileItem(id: UUID(), url: URL(fileURLWithPath: "/nonexistent/path/a.txt"), name: "a.txt", pathExtension: "txt", size: 0, creationDate: nil, modificationDate: nil, contentType: nil)
+        ]
+
+        let result = await DuplicateDetector().detectDuplicates(in: items)
+        XCTAssertEqual(result.groups.count, 0)
+        XCTAssertEqual(result.inaccessibleCount, 1)
     }
 }

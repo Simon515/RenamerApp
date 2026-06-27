@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(SettingsViewModel.self) private var settings
     @State private var viewModel = MainViewModel()
     @State private var taskList = TaskListViewModel()
     @State private var showTaskEditor = false
@@ -35,13 +36,25 @@ struct ContentView: View {
                 HStack {
                     Button("新建任务") { showTaskEditor = true }
                     Spacer()
-                    Button("设置") { /* open settings */ }
+                    Button("设置") {
+                        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                    }
                 }
             }
             .padding()
             .frame(minWidth: 500, minHeight: 400)
             .sheet(isPresented: $showTaskEditor) {
                 TaskEditorView(taskList: taskList)
+            }
+        }
+        .onAppear {
+            viewModel.settings = settings
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .renamerPickFolders)) { notification in
+            guard let urls = notification.object as? [URL] else { return }
+            Task {
+                let template = NamingTemplate(id: UUID(), name: "default", folderTemplate: "{category}", fileNameTemplate: "{date}-{title}")
+                await viewModel.analyze(folders: urls, task: nil, template: template, destination: FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer"), operation: operation)
             }
         }
     }

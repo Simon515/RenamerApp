@@ -19,9 +19,9 @@ final class IntegrationTests: XCTestCase {
         for item in items {
             analyses.append(try await LocalAnalyzer().analyze(item: item))
         }
-        let groups = try await DuplicateDetector().detectDuplicates(in: items)
+        let result = await DuplicateDetector().detectDuplicates(in: items)
         let plan = try NamingEngine(template: template, destination: dest)
-            .buildPlan(taskID: nil, items: items, analyses: analyses, duplicateGroups: groups, operation: .copy)
+            .buildPlan(taskID: nil, items: items, analyses: analyses, duplicateGroups: result.groups, operation: .copy)
 
         XCTAssertEqual(plan.operations.count, 1)
         XCTAssertEqual(plan.operation, .copy)

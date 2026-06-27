@@ -4,26 +4,99 @@ struct TaskEditorView: View {
     @Bindable var taskList: TaskListViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
+    @State private var sourceFolders: [URL] = []
+    @State private var destinationFolder = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer")
+    @State private var selectedTemplateID: UUID?
+    @State private var operation: CopyOrMove = .copy
+    @State private var useCloudAI = false
 
     var body: some View {
-        VStack {
+        Form {
             TextField("任务名称", text: $name)
-            Button("保存") {
-                let task = OrganizationTask(
-                    id: UUID(),
-                    name: name,
-                    sourceFolders: [],
-                    templateID: UUID(),
-                    destinationFolder: FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer"),
-                    operation: .copy,
-                    exportTargets: [],
-                    useCloudAI: false
-                )
-                try? taskList.add(task)
-                dismiss()
+
+            Section("来源") {
+                Button("选择来源文件夹…") {
+                    pickFolders { sourceFolders = $0 }
+                }
+                if !sourceFolders.isEmpty {
+                    Text(sourceFolders.map(\.path).joined(separator: "\n"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(4)
+                }
+            }
+
+            Section("目标") {
+                Button("选择目标文件夹…") {
+                    pickFolder { destinationFolder = $0 }
+                }
+                Text(destinationFolder.path())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Picker("模板", selection: $selectedTemplateID) {
+                ForEach(taskList.templates) { template in
+                    Text(template.name).tag(template.id as UUID?)
+                }
+            }
+
+            Picker("操作", selection: $operation) {
+                Text("复制").tag(CopyOrMove.copy)
+                Text("移动").tag(CopyOrMove.move)
+            }
+            .pickerStyle(.segmented)
+
+            Toggle("使用 Cloud AI", isOn: $useCloudAI)
+
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }
+                Button("保存") { save() }
+                    .disabled(name.isEmpty || sourceFolders.isEmpty || selectedTemplateID == nil)
             }
         }
         .padding()
-        .frame(width: 400, height: 300)
+        .frame(width: 500, height: 420)
+        .onAppear {
+            selectedTemplateID = taskList.templates.first?.id
+        }
+    }
+
+    private func pickFolders(completion: @escaping ([URL]) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        if panel.runModal() == .OK {
+            completion(panel.urls)
+        }
+    }
+
+    private func pickFolder(completion: @escaping (URL) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            completion(url)
+        }
+    }
+
+    private func save() {
+        guard let templateID = selectedTemplateID else { return }
+        let task = OrganizationTask(
+            id: UUID(),
+            name: name,
+            sourceFolders: sourceFolders,
+            templateID: templateID,
+            destinationFolder: destinationFolder,
+            operation: operation,
+            exportTargets: [],
+            useCloudAI: useCloudAI
+        )
+        try? taskList.add(task)
+        dismiss()
     }
 }
