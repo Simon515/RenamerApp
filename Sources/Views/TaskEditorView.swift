@@ -9,6 +9,9 @@ struct TaskEditorView: View {
     @State private var selectedTemplateID: UUID?
     @State private var operation: CopyOrMove = .copy
     @State private var useCloudAI = false
+    @State private var useDEVONthink = false
+    @State private var devonthinkDatabase = ""
+    @State private var devonthinkGroup = ""
 
     var body: some View {
         Form {
@@ -50,6 +53,13 @@ struct TaskEditorView: View {
 
             Toggle("使用 Cloud AI", isOn: $useCloudAI)
 
+            Toggle("导出到 DEVONthink", isOn: $useDEVONthink)
+            if useDEVONthink {
+                TextField("数据库名称", text: $devonthinkDatabase)
+                TextField("组路径", text: $devonthinkGroup)
+                    .textFieldStyle(.roundedBorder)
+            }
+
             HStack {
                 Spacer()
                 Button("取消") { dismiss() }
@@ -86,6 +96,10 @@ struct TaskEditorView: View {
 
     private func save() {
         guard let templateID = selectedTemplateID else { return }
+        var exportTargets: [ExportTarget] = []
+        if useDEVONthink, !devonthinkDatabase.isEmpty, !devonthinkGroup.isEmpty {
+            exportTargets.append(.devonthink(database: devonthinkDatabase, group: devonthinkGroup))
+        }
         let task = OrganizationTask(
             id: UUID(),
             name: name,
@@ -93,7 +107,7 @@ struct TaskEditorView: View {
             templateID: templateID,
             destinationFolder: destinationFolder,
             operation: operation,
-            exportTargets: [],
+            exportTargets: exportTargets,
             useCloudAI: useCloudAI
         )
         try? taskList.add(task)

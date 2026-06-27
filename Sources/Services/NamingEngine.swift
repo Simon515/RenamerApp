@@ -38,6 +38,11 @@ struct NamingEngine {
         result = result.replacingOccurrences(of: "{title}", with: sanitize(analysis.title ?? "Untitled"))
         result = result.replacingOccurrences(of: "{category}", with: sanitize(analysis.category ?? "Uncategorized"))
         result = result.replacingOccurrences(of: "{source}", with: sanitize(analysis.source ?? "Unknown"))
+
+        // 先处理带自定义格式的日期令牌 {date:<format>}。
+        result = resolveDateTokens(in: result, date: analysis.date)
+
+        // 处理默认日期令牌 {date}。
         if let date = analysis.date {
             let fmt = DateFormatter()
             fmt.dateFormat = "yyyyMMdd"
@@ -46,6 +51,43 @@ struct NamingEngine {
             result = result.replacingOccurrences(of: "{date}", with: "nodate")
         }
         return result
+    }
+
+    /// 解析并替换 `{date:<format>}` 令牌；格式无效时回退到 `yyyyMMdd`。
+    private func resolveDateTokens(in template: String, date: Date?) -> String {
+        let pattern = #"\{date:([^}]+)\}"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return template }
+        let nsRange = NSRange(template.startIndex..., in: template)
+
+        var matches: [(range: Range<String.Index>, format: String)] = []
+        regex.enumerateMatches(in: template, options: [], range: nsRange) { match, _, _ in
+            guard let match = match,
+                  let fullRange = Range(match.range, in: template),
+                  let formatRange = Range(match.range(at: 1), in: template) else { return }
+            matches.append((fullRange, String(template[formatRange])))
+        }
+
+        var result = template
+        // 从后往前替换，避免前面的替换影响后续 range。
+        for (range, format) in matches.reversed() {
+            let replacement: String
+            if let date = date {
+                let formatter = DateFormatter()
+                formatter.dateFormat = format
+                let formatted = formatter.string(from: date)
+                replacement = formatted.isEmpty ? fallbackDateString(for: date) : formatted
+            } else {
+                replacement = "nodate"
+            }
+            result.replaceSubrange(range, with: replacement)
+        }
+        return result
+    }
+
+    private func fallbackDateString(for date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyyMMdd"
+        return fmt.string(from: date)
     }
 
     private func sanitize(_ string: String) -> String {

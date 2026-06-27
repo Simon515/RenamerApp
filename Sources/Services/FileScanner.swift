@@ -4,8 +4,13 @@ import UniformTypeIdentifiers
 /// 递归并发文件扫描器。
 ///
 /// 对多个输入目录并行执行扫描，返回扁平化的 `FileItem` 列表。
-/// 扫描时会跳过隐藏文件、包后代以及非普通文件（如目录、符号链接等）。
+/// 扫描时会跳过隐藏文件、包后代、非普通文件（如目录、符号链接等）以及常见系统目录。
 actor FileScanner {
+    /// 扫描时应跳过的系统目录名列表。
+    private static let skippedSystemDirectories: Set<String> = [
+        ".Trash", ".fseventsd", ".Spotlight-V100", "TemporaryItems",
+        ".DS_Store", ".DocumentRevisions-V100", ".PKInstallSandboxManager-SystemSoftware"
+    ]
     /// 并发扫描多个文件夹。
     /// - Parameter folders: 待扫描的目录 URL 列表。
     /// - Returns: 所有扫描到的文件模型列表。
@@ -44,7 +49,16 @@ actor FileScanner {
 
         var items: [FileItem] = []
         for case let url as URL in enumerator {
-            let attrs = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey, .contentTypeKey])
+            let resourceKeys: Set<URLResourceKey> = [.isDirectoryKey, .isRegularFileKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey, .contentTypeKey]
+            let attrs = try? url.resourceValues(forKeys: resourceKeys)
+
+            if attrs?.isDirectory == true {
+                if Self.skippedSystemDirectories.contains(url.lastPathComponent) {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+
             guard attrs?.isRegularFile == true else { continue }
 
             items.append(FileItem(

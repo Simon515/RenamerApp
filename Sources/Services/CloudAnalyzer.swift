@@ -37,7 +37,8 @@ struct CloudAnalyzer {
     }
 
     func apply(json: String, to analysis: FileAnalysis) -> FileAnalysis {
-        guard let data = json.data(using: .utf8),
+        let cleaned = cleanJSONContent(json)
+        guard let data = cleaned.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return analysis
         }
@@ -53,5 +54,22 @@ struct CloudAnalyzer {
         if let tags = obj["tags"] as? [String] { copy.tags = tags }
         if let conf = obj["confidence"] as? Double { copy.confidence = conf }
         return copy
+    }
+
+    /// 去除可能包裹在 JSON 外的 Markdown 代码围栏并裁剪空白。
+    private func cleanJSONContent(_ content: String) -> String {
+        var cleaned = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.hasPrefix("```") {
+            if let firstNewline = cleaned.firstIndex(of: "\n") {
+                cleaned.removeSubrange(cleaned.startIndex...firstNewline)
+            } else {
+                cleaned.removeAll()
+            }
+            cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if cleaned.hasSuffix("```") {
+            cleaned = String(cleaned.dropLast(3)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return cleaned
     }
 }

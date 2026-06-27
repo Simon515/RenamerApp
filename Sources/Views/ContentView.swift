@@ -33,6 +33,10 @@ struct ContentView: View {
                     }
                 }
 
+                if !taskList.tasks.isEmpty {
+                    recentTasksSection
+                }
+
                 HStack {
                     Button("新建任务") { showTaskEditor = true }
                     Spacer()
@@ -49,6 +53,7 @@ struct ContentView: View {
         }
         .onAppear {
             viewModel.settings = settings
+            try? taskList.load()
         }
         .onReceive(NotificationCenter.default.publisher(for: .renamerPickFolders)) { notification in
             guard let urls = notification.object as? [URL] else { return }
@@ -57,6 +62,55 @@ struct ContentView: View {
                 await viewModel.analyze(folders: urls, task: nil, template: template, destination: FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer"), operation: operation)
             }
         }
+        .alert("提示", isPresented: Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )) {
+            Button("确定") { viewModel.errorMessage = nil }
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var recentTasksSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("最近任务")
+                .font(.headline)
+            ForEach(taskList.tasks) { task in
+                Button {
+                    Task {
+                        if let template = taskList.templates.first(where: { $0.id == task.templateID }) {
+                            await viewModel.analyze(
+                                folders: task.sourceFolders,
+                                task: task,
+                                template: template,
+                                destination: task.destinationFolder,
+                                operation: task.operation
+                            )
+                        }
+                    }
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(task.name)
+                                .font(.subheadline)
+                            Text(task.sourceFolders.map(\.path).joined(separator: ", "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: "play.circle")
+                    }
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

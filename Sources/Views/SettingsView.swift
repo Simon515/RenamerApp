@@ -6,14 +6,52 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var settings = settings
         TabView {
-            Text("通用")
+            generalTab
                 .tabItem { Label("通用", systemImage: "gear") }
-            Text("模板")
+            templatesTab
                 .tabItem { Label("模板", systemImage: "text.quote") }
             aiTab
                 .tabItem { Label("AI", systemImage: "cpu") }
         }
         .frame(width: 500, height: 350)
+    }
+
+    @ViewBuilder
+    private var generalTab: some View {
+        @Bindable var settings = settings
+        Form {
+            Picker("默认操作", selection: Binding(
+                get: { settings.defaultOperation },
+                set: {
+                    settings.defaultOperation = $0
+                    settings.save()
+                }
+            )) {
+                Text("复制").tag(CopyOrMove.copy)
+                Text("移动").tag(CopyOrMove.move)
+            }
+            .pickerStyle(.segmented)
+        }
+        .padding()
+    }
+
+    @ViewBuilder
+    private var templatesTab: some View {
+        @Bindable var settings = settings
+        List(settings.templates) { template in
+            VStack(alignment: .leading, spacing: 4) {
+                Text(template.name)
+                    .font(.headline)
+                Text("文件夹: \(template.folderTemplate)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("文件名: \(template.fileNameTemplate)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+        }
+        .frame(minWidth: 300)
     }
 
     @ViewBuilder
@@ -38,11 +76,29 @@ struct SettingsView: View {
                 }
             }
 
-            TextField("Base URL", text: $settings.cloudBaseURL)
+            TextField("Base URL", text: Binding(
+                get: { settings.cloudBaseURL },
+                set: {
+                    settings.cloudBaseURL = $0
+                    settings.save()
+                }
+            ))
                 .textFieldStyle(.roundedBorder)
-            SecureField("API Key", text: $settings.cloudAPIKey)
+            SecureField("API Key", text: Binding(
+                get: { settings.cloudAPIKey },
+                set: {
+                    settings.cloudAPIKey = $0
+                    settings.save()
+                }
+            ))
                 .textFieldStyle(.roundedBorder)
-            TextField("Model", text: $settings.cloudModel)
+            TextField("Model", text: Binding(
+                get: { settings.cloudModel },
+                set: {
+                    settings.cloudModel = $0
+                    settings.save()
+                }
+            ))
                 .textFieldStyle(.roundedBorder)
         }
         .padding()

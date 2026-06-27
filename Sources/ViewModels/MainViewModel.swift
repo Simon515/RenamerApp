@@ -32,7 +32,7 @@ final class MainViewModel {
                 let text = (try? await localAnalyzer.extractText(for: item)) ?? ""
                 textsByID[item.id] = text
                 do {
-                    analyses.append(try await localAnalyzer.analyze(item: item))
+                    analyses.append(try await localAnalyzer.analyze(item: item, text: text))
                 } catch {
                     failureCount += 1
                     analyses.append(FileAnalysis(
@@ -96,6 +96,10 @@ final class MainViewModel {
         do {
             let record = try await Organizer().execute(plan: plan, taskName: taskName, operation: effectiveOperation)
             try await RollbackService().save(record: record)
+        } catch let error as OrganizerError {
+            // 即使整理中途失败，也要保存已完成操作的记录以便部分回滚。
+            try? await RollbackService().save(record: error.partialRecord)
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }
