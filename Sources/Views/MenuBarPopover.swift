@@ -6,8 +6,10 @@ extension Notification.Name {
 }
 
 struct MenuBarPopover: View {
-    var openMainWindow: () -> Void
-    var onPickFolders: ([URL]) -> Void
+    @MainActor
+    var openMainWindow: @MainActor () -> Void
+    @MainActor
+    var onPickFolders: @MainActor ([URL]) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

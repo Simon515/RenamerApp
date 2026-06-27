@@ -14,7 +14,7 @@ struct NamingEngine {
     ) throws -> OrganizationPlan {
         let analysisByID = Dictionary(uniqueKeysWithValues: analyses.map { ($0.id, $0) })
         var operations: [PlanOperation] = []
-        var usedNames: Set<String> = []
+        var usedNamesByDirectory: [String: Set<String>] = [:]
 
         let skippedIDs = Set(duplicateGroups.flatMap { group -> [UUID] in
             guard let keep = group.keepIndex else { return [] }
@@ -25,8 +25,10 @@ struct NamingEngine {
             guard let analysis = analysisByID[item.id] else { continue }
             let folder = resolve(template.folderTemplate, analysis: analysis)
             let baseName = resolve(template.fileNameTemplate, analysis: analysis)
-            let uniqueName = uniqueFileName(base: baseName, ext: item.pathExtension, used: &usedNames)
-            let dest = destination.appending(path: folder).appending(path: uniqueName)
+            let destDir = destination.appending(path: folder)
+            let dirKey = destDir.path()
+            let uniqueName = uniqueFileName(base: baseName, ext: item.pathExtension, used: &usedNamesByDirectory[dirKey, default: Set()])
+            let dest = destDir.appending(path: uniqueName)
             operations.append(PlanOperation(id: UUID(), source: item.url, destination: dest, exportTargets: exportTargets, isEnabled: true))
         }
 

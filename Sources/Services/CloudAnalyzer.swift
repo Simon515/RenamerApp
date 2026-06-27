@@ -68,13 +68,18 @@ struct CloudAnalyzer {
     }
 
     /// 去除可能包裹在 JSON 外的 Markdown 代码围栏并裁剪空白。
+    /// 支持围栏后无换行的情况，例如 ` ```json{"x":1}``` `。
     private func cleanJSONContent(_ content: String) -> String {
         var cleaned = content.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleaned.hasPrefix("```") {
+            // 去掉开头的 ``` 或 ```json 等语言标记。
             if let firstNewline = cleaned.firstIndex(of: "\n") {
                 cleaned.removeSubrange(cleaned.startIndex...firstNewline)
             } else {
-                cleaned.removeAll()
+                cleaned = String(cleaned.dropFirst(3))
+                if let spaceIndex = cleaned.firstIndex(where: { $0.isWhitespace }) {
+                    cleaned.removeSubrange(cleaned.startIndex...spaceIndex)
+                }
             }
             cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
         }

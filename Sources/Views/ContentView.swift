@@ -14,7 +14,7 @@ struct ContentView: View {
                     .font(.largeTitle)
                 DropZoneView { urls in
                     Task {
-                        let template = NamingTemplate(id: UUID(), name: "default", folderTemplate: "{category}", fileNameTemplate: "{date}-{title}")
+                        let template = settings.defaultTemplate
                         await viewModel.analyze(folders: urls, task: nil, template: template, destination: FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer"), operation: operation)
                     }
                 }
@@ -59,17 +59,20 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .renamerPickFolders)) { notification in
             guard let urls = notification.object as? [URL] else { return }
             Task {
-                let template = NamingTemplate(id: UUID(), name: "default", folderTemplate: "{category}", fileNameTemplate: "{date}-{title}")
+                let template = settings.defaultTemplate
                 await viewModel.analyze(folders: urls, task: nil, template: template, destination: FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer"), operation: operation)
             }
         }
         .alert("提示", isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
+            get: { viewModel.errorMessage != nil || viewModel.successMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil; viewModel.successMessage = nil } }
         )) {
-            Button("确定") { viewModel.errorMessage = nil }
+            Button("确定") {
+                viewModel.errorMessage = nil
+                viewModel.successMessage = nil
+            }
         } message: {
-            Text(viewModel.errorMessage ?? "")
+            Text(viewModel.errorMessage ?? viewModel.successMessage ?? "")
         }
     }
 
@@ -81,7 +84,7 @@ struct ContentView: View {
             ForEach(taskList.tasks) { task in
                 Button {
                     Task {
-                        if let template = taskList.templates.first(where: { $0.id == task.templateID }) {
+                        if let template = settings.templates.first(where: { $0.id == task.templateID }) {
                             await viewModel.analyze(
                                 folders: task.sourceFolders,
                                 task: task,
@@ -130,6 +133,7 @@ struct DropZoneView: NSViewRepresentable {
         Coordinator(onDrop: onDrop)
     }
 
+    @MainActor
     class Coordinator: NSObject, NSDraggingDestination {
         let onDrop: ([URL]) -> Void
         init(onDrop: @escaping ([URL]) -> Void) { self.onDrop = onDrop }

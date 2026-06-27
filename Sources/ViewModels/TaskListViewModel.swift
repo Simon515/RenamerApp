@@ -9,10 +9,12 @@ final class TaskListViewModel {
     var templates: [NamingTemplate] = SettingsViewModel.defaultTemplates
 
     private var storageURL: URL {
-        FileManager.default
+        guard let supportURL = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first!
-            .appending(path: "tasks.json")
+            .first else {
+            return FileManager.default.temporaryDirectory.appending(path: "renamer_tasks.json")
+        }
+        return supportURL.appending(path: "tasks.json")
     }
 
     func load() throws {

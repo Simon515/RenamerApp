@@ -43,7 +43,7 @@ struct TaskEditorView: View {
             }
 
             Picker("模板", selection: $selectedTemplateID) {
-                ForEach(taskList.templates) { template in
+                ForEach(settings.templates) { template in
                     Text(template.name).tag(template.id as UUID?)
                 }
             }
@@ -74,7 +74,7 @@ struct TaskEditorView: View {
         .frame(width: 500, height: 420)
         .onAppear {
             operation = settings.defaultOperation
-            selectedTemplateID = taskList.templates.first?.id
+            selectedTemplateID = settings.defaultTemplateID ?? settings.templates.first?.id
         }
         .alert("保存失败", isPresented: $showError) {
             Button("确定") { showError = false }

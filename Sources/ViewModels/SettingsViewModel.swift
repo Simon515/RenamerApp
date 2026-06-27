@@ -5,6 +5,7 @@ import SwiftUI
 @Observable
 final class SettingsViewModel {
     var templates: [NamingTemplate] = SettingsViewModel.defaultTemplates
+    var defaultTemplateID: UUID? = SettingsViewModel.defaultTemplates.first?.id
     var defaultOperation: CopyOrMove = .copy
     var cloudBaseURL: String = ""
     var cloudAPIKey: String = ""
@@ -23,6 +24,14 @@ final class SettingsViewModel {
         NamingTemplate(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, name: "按日期", folderTemplate: "{date:yyyy}/{date:MM}", fileNameTemplate: "{title}"),
         NamingTemplate(id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, name: "按来源", folderTemplate: "{source}", fileNameTemplate: "{date}-{title}")
     ]
+
+    /// 当前默认模板；若未找到则返回第一个模板。
+    var defaultTemplate: NamingTemplate {
+        templates.first { $0.id == defaultTemplateID }
+            ?? templates.first
+            ?? SettingsViewModel.defaultTemplates.first
+            ?? NamingTemplate(id: UUID(), name: "默认", folderTemplate: "{category}", fileNameTemplate: "{date}-{title}")
+    }
 
     /// 根据当前输入构造云端配置；字段不完整时返回 nil。
     var cloudConfiguration: CloudConfiguration? {
@@ -50,6 +59,8 @@ final class SettingsViewModel {
     func save() {
         do {
             let payload = SettingsPayload(
+                templates: templates,
+                defaultTemplateID: defaultTemplateID,
                 defaultOperation: defaultOperation,
                 cloudBaseURL: cloudBaseURL,
                 cloudAPIKey: cloudAPIKey,
@@ -69,6 +80,8 @@ final class SettingsViewModel {
         do {
             let data = try Data(contentsOf: Self.settingsURL)
             let payload = try JSONDecoder().decode(SettingsPayload.self, from: data)
+            templates = payload.templates.isEmpty ? SettingsViewModel.defaultTemplates : payload.templates
+            defaultTemplateID = payload.defaultTemplateID ?? templates.first?.id
             defaultOperation = payload.defaultOperation
             cloudBaseURL = payload.cloudBaseURL
             cloudAPIKey = payload.cloudAPIKey
@@ -79,14 +92,18 @@ final class SettingsViewModel {
     }
 
     private static var settingsURL: URL {
-        FileManager.default
+        guard let supportURL = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first!
-            .appending(path: "settings.json")
+            .first else {
+            return FileManager.default.temporaryDirectory.appending(path: "renamer_settings.json")
+        }
+        return supportURL.appending(path: "settings.json")
     }
 }
 
 private struct SettingsPayload: Codable {
+    var templates: [NamingTemplate]
+    var defaultTemplateID: UUID?
     var defaultOperation: CopyOrMove
     var cloudBaseURL: String
     var cloudAPIKey: String

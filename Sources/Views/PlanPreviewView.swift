@@ -48,17 +48,22 @@ struct PlanPreviewView: View {
                         await viewModel.execute(plan: plan, taskName: "manual", operation: plan.operation)
                     }
                 }
+            } else {
+                ContentUnavailableView("暂无整理计划", systemImage: "doc.text.magnifyingglass")
             }
         }
         .padding()
         .frame(minWidth: 700, minHeight: 500)
         .alert("提示", isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
+            get: { viewModel.errorMessage != nil || viewModel.successMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil; viewModel.successMessage = nil } }
         )) {
-            Button("确定") { viewModel.errorMessage = nil }
+            Button("确定") {
+                viewModel.errorMessage = nil
+                viewModel.successMessage = nil
+            }
         } message: {
-            Text(viewModel.errorMessage ?? "")
+            Text(viewModel.errorMessage ?? viewModel.successMessage ?? "")
         }
     }
 

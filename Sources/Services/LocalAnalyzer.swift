@@ -33,7 +33,7 @@ actor LocalAnalyzer {
             let text = try await extractText(for: item)
             if !text.isEmpty {
                 analysis.title = inferTitle(from: text)
-                analysis.tags = extractKeywords(from: text)
+                analysis.tags = extractNamedEntities(from: text)
                 analysis.summary = String(text.prefix(200))
                 analysis.confidence = 0.7
             }
@@ -64,7 +64,7 @@ actor LocalAnalyzer {
             analysis = await mergeVideoMetadata(analysis: analysis, item: item)
         } else if !text.isEmpty {
             analysis.title = inferTitle(from: text)
-            analysis.tags = extractKeywords(from: text)
+            analysis.tags = extractNamedEntities(from: text)
             analysis.summary = String(text.prefix(200))
             analysis.confidence = 0.7
         }
@@ -80,8 +80,12 @@ actor LocalAnalyzer {
             #else
             return ""
             #endif
+        } else if ext == "rtf" {
+            return extractRTFText(url: item.url)
         } else if ["txt", "md", "swift", "py", "json", "csv"].contains(ext) {
             return (try? String(contentsOf: item.url, encoding: .utf8)) ?? ""
+        } else if ["docx", "pages", "numbers", "keynote"].contains(ext) {
+            return extractSpotlightText(url: item.url)
         }
         return ""
     }
@@ -99,22 +103,49 @@ actor LocalAnalyzer {
     }
     #endif
 
+    private nonisolated func extractRTFText(url: URL) -> String {
+        guard let data = try? Data(contentsOf: url),
+              let attributed = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil) else {
+            return ""
+        }
+        return attributed.string
+    }
+
+    /// 通过 Spotlight (`mdls`) 提取文档文本内容，作为 docx/pages/numbers/keynote 的简易回退。
+    private nonisolated func extractSpotlightText(url: URL) -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/mdls")
+        process.arguments = ["-name", "kMDItemTextContent", "-raw", url.path()]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let string = String(data: data, encoding: .utf8) else { return "" }
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed == "(null)" ? "" : trimmed
+        } catch {
+            return ""
+        }
+    }
+
     private func inferTitle(from text: String) -> String? {
         let lines = text.split(whereSeparator: \.isNewline).map(String.init)
         return lines.first { $0.count > 5 && $0.count < 200 }
     }
 
-    private func extractKeywords(from text: String) -> [String] {
+    private func extractNamedEntities(from text: String) -> [String] {
         let tagger = NLTagger(tagSchemes: [.nameType])
         tagger.string = text
-        var keywords: [String] = []
+        var names: [String] = []
         tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .nameType, options: [.omitPunctuation, .omitWhitespace]) { tag, range in
             if tag == .personalName || tag == .organizationName || tag == .placeName {
-                keywords.append(String(text[range]))
+                names.append(String(text[range]))
             }
             return true
         }
-        return Array(keywords.prefix(10))
+        return Array(names.prefix(10))
     }
 
     private func isImage(ext: String) -> Bool {

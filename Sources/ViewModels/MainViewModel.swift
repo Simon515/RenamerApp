@@ -7,6 +7,7 @@ final class MainViewModel {
     var plan: OrganizationPlan?
     var isAnalyzing = false
     var errorMessage: String?
+    var successMessage: String?
     var settings: SettingsViewModel?
 
     var cloudConfig: CloudConfiguration?
@@ -35,37 +36,83 @@ final class MainViewModel {
             var analyses: [FileAnalysis] = []
             var textsByID: [UUID: String] = [:]
             var failureCount = 0
-            for item in items {
-                let text = (try? await localAnalyzer.extractText(for: item)) ?? ""
-                textsByID[item.id] = text
-                do {
-                    analyses.append(try await localAnalyzer.analyze(item: item, text: text))
-                } catch {
-                    failureCount += 1
-                    analyses.append(FileAnalysis(
-                        id: item.id,
-                        title: item.url.deletingPathExtension().lastPathComponent,
-                        date: item.creationDate ?? item.modificationDate,
-                        category: nil,
-                        tags: [],
-                        source: nil,
-                        summary: nil,
-                        confidence: 0.0
-                    ))
+
+            // 本地分析并发执行，提高大目录处理速度。
+            try await withThrowingTaskGroup(of: (item: FileItem, text: String, analysis: FileAnalysis, failed: Bool).self) { group in
+                for item in items {
+                    group.addTask { [localAnalyzer] in
+                        let text = (try? await localAnalyzer.extractText(for: item)) ?? ""
+                        do {
+                            let analysis = try await localAnalyzer.analyze(item: item, text: text)
+                            return (item, text, analysis, false)
+                        } catch {
+                            let fallback = FileAnalysis(
+                                id: item.id,
+                                title: item.url.deletingPathExtension().lastPathComponent,
+                                date: item.creationDate ?? item.modificationDate,
+                                category: nil,
+                                tags: [],
+                                source: nil,
+                                summary: nil,
+                                confidence: 0.0
+                            )
+                            return (item, text, fallback, true)
+                        }
+                    }
+                }
+
+                for try await result in group {
+                    textsByID[result.item.id] = result.text
+                    analyses.append(result.analysis)
+                    if result.failed {
+                        failureCount += 1
+                    }
                 }
             }
+
+            // 保持 analyses 与 items 顺序一致，便于后续计划构建。
+            let analysisByID = Dictionary(uniqueKeysWithValues: analyses.map { ($0.id, $0) })
+            analyses = items.compactMap { analysisByID[$0.id] }
 
             var cloudFailureCount = 0
             if task?.useCloudAI == true, let config = cloudConfig {
                 let cloudAnalyzer = CloudAnalyzer(baseURL: config.baseURL, apiKey: config.apiKey, model: config.model)
-                for i in analyses.indices {
-                    let text = textsByID[analyses[i].id] ?? ""
-                    do {
-                        let enhanced = try await cloudAnalyzer.enhance(analyses[i], text: text)
-                        analyses[i] = enhanced
-                    } catch {
-                        cloudFailureCount += 1
+                // 云端请求限速：最多 3 个并发，避免触发服务商速率限制。
+                let maxConcurrentCloud = 3
+                let total = analyses.count
+                var index = 0
+
+                while index < total {
+                    let batchEnd = min(index + maxConcurrentCloud, total)
+                    let batchEntries = Array(index..<batchEnd).map { (
+                        index: $0,
+                        analysis: analyses[$0],
+                        text: textsByID[analyses[$0].id] ?? ""
+                    ) }
+                    let results: [(index: Int, analysis: FileAnalysis, succeeded: Bool)] = await withTaskGroup(of: (Int, FileAnalysis, Bool).self) { group in
+                        for entry in batchEntries {
+                            group.addTask {
+                                do {
+                                    let enhanced = try await cloudAnalyzer.enhance(entry.analysis, text: entry.text)
+                                    return (entry.index, enhanced, true)
+                                } catch {
+                                    return (entry.index, entry.analysis, false)
+                                }
+                            }
+                        }
+                        var collected: [(Int, FileAnalysis, Bool)] = []
+                        for await result in group {
+                            collected.append(result)
+                        }
+                        return collected
                     }
+                    for result in results {
+                        analyses[result.index] = result.analysis
+                        if !result.succeeded {
+                            cloudFailureCount += 1
+                        }
+                    }
+                    index = batchEnd
                 }
             }
 
@@ -136,8 +183,11 @@ final class MainViewModel {
     func execute(plan: OrganizationPlan, taskName: String, operation: CopyOrMove? = nil) async {
         let effectiveOperation = operation ?? plan.operation
         do {
+            let enabledCount = plan.operations.filter(\.isEnabled).count
             let record = try await Organizer().execute(plan: plan, taskName: taskName, operation: effectiveOperation)
             try await RollbackService().save(record: record)
+            self.plan = nil
+            successMessage = "整理完成，已处理 \(record.moves.count) 个文件（启用 \(enabledCount) 项）"
         } catch let error as OrganizerError {
             // 即使整理中途失败，也要保存已完成操作的记录以便部分回滚。
             try? await RollbackService().save(record: error.partialRecord)

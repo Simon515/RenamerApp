@@ -41,4 +41,13 @@ final class CloudAnalyzerTests: XCTestCase {
         XCTAssertEqual(result.category, "Invoices/2024")
         XCTAssertEqual(result.tags, ["rent"])
     }
+
+    func testParseResponseWithNoNewlineAfterFence() throws {
+        let json = "```json{\"title\": \"Invoice\", \"category\": \"Invoices/2024\", \"tags\": [\"rent\"], \"source\": \"landlord\", \"date\": \"2024-05-21T10:30:00Z\", \"confidence\": 0.95}```"
+        let base = FileAnalysis(id: UUID(), title: nil, date: nil, category: nil, tags: [], source: nil, summary: nil, confidence: 0.5)
+        let result = CloudAnalyzer(baseURL: URL(string: "http://localhost")!, apiKey: "", model: "").apply(json: json, to: base)
+        XCTAssertEqual(result.title, "Invoice")
+        XCTAssertEqual(result.category, "Invoices/2024")
+        XCTAssertEqual(result.tags, ["rent"])
+    }
 }
