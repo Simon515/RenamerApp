@@ -23,7 +23,7 @@ actor FileScanner {
     func scan(folders: [URL]) async -> ScanResult {
         await withTaskGroup(of: Result<[FileItem], Error>.self) { group in
             for folder in folders {
-                group.addTask { await self.scan(folder: folder) }
+                group.addTask { self.scan(folder: folder) }
             }
             var all: [FileItem] = []
             var inaccessible = 0
@@ -42,7 +42,7 @@ actor FileScanner {
     /// 递归扫描单个文件夹。
     /// - Parameter folder: 待扫描的目录 URL。
     /// - Returns: 该目录下扫描到的文件模型列表的 Result。
-    private func scan(folder: URL) async -> Result<[FileItem], Error> {
+    private nonisolated func scan(folder: URL) -> Result<[FileItem], Error> {
         do {
             return .success(try scanSynchronously(folder: folder))
         } catch {

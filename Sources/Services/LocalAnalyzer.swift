@@ -11,7 +11,7 @@ import AVFoundation
 #endif
 
 actor LocalAnalyzer {
-    func analyze(item: FileItem) async throws -> FileAnalysis {
+    nonisolated func analyze(item: FileItem) async throws -> FileAnalysis {
         var analysis = FileAnalysis(
             id: item.id,
             title: nil,
@@ -44,7 +44,7 @@ actor LocalAnalyzer {
 
     /// 为减少文件读取次数，可先提取文本，再传入分析流程。
     /// 媒体文件（图片/视频）仍独立提取元数据；文本/PDF 直接使用传入的 text。
-    func analyze(item: FileItem, text: String) async throws -> FileAnalysis {
+    nonisolated func analyze(item: FileItem, text: String) async throws -> FileAnalysis {
         var analysis = FileAnalysis(
             id: item.id,
             title: nil,
@@ -130,12 +130,12 @@ actor LocalAnalyzer {
         }
     }
 
-    private func inferTitle(from text: String) -> String? {
+    private nonisolated func inferTitle(from text: String) -> String? {
         let lines = text.split(whereSeparator: \.isNewline).map(String.init)
         return lines.first { $0.count > 5 && $0.count < 200 }
     }
 
-    private func extractNamedEntities(from text: String) -> [String] {
+    private nonisolated func extractNamedEntities(from text: String) -> [String] {
         let tagger = NLTagger(tagSchemes: [.nameType])
         tagger.string = text
         var names: [String] = []
@@ -148,16 +148,16 @@ actor LocalAnalyzer {
         return Array(names.prefix(10))
     }
 
-    private func isImage(ext: String) -> Bool {
+    private nonisolated func isImage(ext: String) -> Bool {
         ["jpg", "jpeg", "png", "heic", "tiff", "tif", "bmp", "gif", "webp"].contains(ext)
     }
 
-    private func isVideo(ext: String) -> Bool {
+    private nonisolated func isVideo(ext: String) -> Bool {
         ["mp4", "mov", "m4v", "avi", "mkv", "wmv", "flv", "webm"].contains(ext)
     }
 
     /// 使用 ImageIO 提取图片 EXIF/TIFF 等元数据。
-    private func mergeImageMetadata(analysis: FileAnalysis, item: FileItem) -> FileAnalysis {
+    private nonisolated func mergeImageMetadata(analysis: FileAnalysis, item: FileItem) -> FileAnalysis {
         var copy = analysis
         #if canImport(ImageIO)
         guard let source = CGImageSourceCreateWithURL(item.url as CFURL, nil) else { return copy }
@@ -197,7 +197,7 @@ actor LocalAnalyzer {
     }
 
     /// 使用 AVFoundation 提取视频时长、创建日期等元数据。
-    private func mergeVideoMetadata(analysis: FileAnalysis, item: FileItem) async -> FileAnalysis {
+    private nonisolated func mergeVideoMetadata(analysis: FileAnalysis, item: FileItem) async -> FileAnalysis {
         var copy = analysis
         #if canImport(AVFoundation)
         let asset = AVAsset(url: item.url)
@@ -238,7 +238,7 @@ actor LocalAnalyzer {
         return copy
     }
 
-    private func parseEXIFDate(_ string: String) -> Date? {
+    private nonisolated func parseEXIFDate(_ string: String) -> Date? {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
         formatter.timeZone = TimeZone.current
