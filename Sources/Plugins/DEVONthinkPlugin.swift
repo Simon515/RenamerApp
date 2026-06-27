@@ -27,25 +27,29 @@ struct DEVONthinkPlugin: ExportPlugin {
         """
     }
 
-    @MainActor
     func export(file: URL, target: ExportTarget) async throws -> String {
         guard case .devonthink(let database, let group) = target else {
             throw AnalysisError.unsupportedType("target")
         }
         let scriptSource = appleScript(forFile: file, target: target)
 
-        guard let appleScript = NSAppleScript(source: scriptSource) else {
-            throw AnalysisError.unsupportedType("无法创建 AppleScript")
-        }
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global().async {
+                guard let appleScript = NSAppleScript(source: scriptSource) else {
+                    continuation.resume(throwing: AnalysisError.unsupportedType("无法创建 AppleScript"))
+                    return
+                }
 
-        var errorInfo: NSDictionary?
-        appleScript.executeAndReturnError(&errorInfo)
-        if let errorInfo = errorInfo {
-            let message = (errorInfo[NSAppleScript.errorMessage] as? String) ?? "未知 AppleScript 错误"
-            throw AnalysisError.unsupportedType("DEVONthink 导出失败：\(message)")
+                var errorInfo: NSDictionary?
+                appleScript.executeAndReturnError(&errorInfo)
+                if let errorInfo = errorInfo {
+                    let message = (errorInfo[NSAppleScript.errorMessage] as? String) ?? "未知 AppleScript 错误"
+                    continuation.resume(throwing: AnalysisError.unsupportedType("DEVONthink 导出失败：\(message)"))
+                } else {
+                    continuation.resume(returning: "imported into \(database)/\(group)")
+                }
+            }
         }
-
-        return "imported into \(database)/\(group)"
     }
 
     private static func appleScriptEscape(_ string: String) -> String {

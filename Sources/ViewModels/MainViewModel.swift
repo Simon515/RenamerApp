@@ -195,9 +195,14 @@ final class MainViewModel {
         do {
             let enabledCount = plan.operations.filter(\.isEnabled).count
             let record = try await Organizer().execute(plan: plan, taskName: taskName, operation: effectiveOperation)
-            try await RollbackService().save(record: record)
-            self.plan = nil
-            successMessage = "整理完成，已处理 \(record.moves.count) 个文件（启用 \(enabledCount) 项）"
+            do {
+                try await RollbackService().save(record: record)
+                self.plan = nil
+                successMessage = "整理完成，已处理 \(record.moves.count) 个文件（启用 \(enabledCount) 项）"
+            } catch {
+                // 整理已成功，但回滚记录保存失败；保留计划以便用户知晓并自行处理。
+                errorMessage = "整理已完成，但回滚记录保存失败：\(error.localizedDescription)"
+            }
         } catch let error as OrganizerError {
             // 即使整理中途失败，也要保存已完成操作的记录以便部分回滚。
             try? await RollbackService().save(record: error.partialRecord)

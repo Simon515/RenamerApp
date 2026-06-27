@@ -28,17 +28,10 @@ struct PlanPreviewView: View {
 
                     Section("操作") {
                         ForEach(planOperationsBinding) { $op in
-                            HStack {
-                                Toggle("", isOn: $op.isEnabled)
-                                    .labelsHidden()
-                                VStack(alignment: .leading) {
-                                    Text(op.source.lastPathComponent)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    Text(op.destination.path())
-                                }
-                                Spacer()
-                            }
+                            OperationRow(
+                                operation: $op,
+                                analysis: plan.analyses.first { $0.id == op.analysisID }
+                            )
                         }
                     }
                 }
@@ -110,4 +103,79 @@ struct PlanPreviewView: View {
             set: { viewModel.plan?.duplicateGroups = $0 }
         )
     }
+}
+
+// MARK: - 操作行
+
+private struct OperationRow: View {
+    @Binding var operation: PlanOperation
+    let analysis: FileAnalysis?
+    @State private var isExpanded = false
+
+    private var destinationBinding: Binding<String> {
+        Binding(
+            get: { operation.destination.path() },
+            set: { operation.destination = URL(fileURLWithPath: $0) }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Toggle("", isOn: $operation.isEnabled)
+                    .labelsHidden()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(operation.source.lastPathComponent)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextField("目标路径", text: destinationBinding)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack(spacing: 8) {
+                        if let analysis = analysis, !analysis.tags.isEmpty {
+                            Text(analysis.tags.joined(separator: ", "))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        if let analysis = analysis {
+                            Text("置信度: \(analysis.confidence, format: .percent)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Button(action: { isExpanded.toggle() }) {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                }
+                .buttonStyle(.plain)
+            }
+
+            if isExpanded, let analysis = analysis {
+                VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent("标题", value: analysis.title ?? "-")
+                    LabeledContent("日期", value: analysis.date.map { DateFormatter.shortDate.string(from: $0) } ?? "-")
+                    LabeledContent("分类", value: analysis.category ?? "-")
+                    LabeledContent("标签", value: analysis.tags.isEmpty ? "-" : analysis.tags.joined(separator: ", "))
+                    LabeledContent("置信度", value: analysis.confidence.formatted(.percent))
+                    LabeledContent("摘要", value: analysis.summary ?? "-")
+                }
+                .font(.caption)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private extension DateFormatter {
+    static let shortDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .none
+        return formatter
+    }()
 }

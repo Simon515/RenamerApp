@@ -29,7 +29,7 @@ struct NamingEngine {
             let dirKey = destDir.path()
             let uniqueName = uniqueFileName(base: baseName, ext: item.pathExtension, used: &usedNamesByDirectory[dirKey, default: Set()])
             let dest = destDir.appending(path: uniqueName)
-            operations.append(PlanOperation(id: UUID(), source: item.url, destination: dest, exportTargets: exportTargets, isEnabled: true))
+            operations.append(PlanOperation(id: UUID(), source: item.url, analysisID: analysis.id, destination: dest, exportTargets: exportTargets, isEnabled: true))
         }
 
         return OrganizationPlan(id: UUID(), taskID: taskID, analyses: analyses, operations: operations, duplicateGroups: duplicateGroups, operation: operation)
