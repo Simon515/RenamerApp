@@ -4,6 +4,6 @@ struct OrganizationPlan: Sendable, Identifiable {
     let id: UUID
     let taskID: UUID?
     let analyses: [FileAnalysis]
-    let operations: [PlanOperation]
+    var operations: [PlanOperation]
     let duplicateGroups: [DuplicateGroup]
 }
