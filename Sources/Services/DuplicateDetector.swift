@@ -1,9 +1,6 @@
 import Foundation
 import CryptoKit
 
-import Foundation
-import CryptoKit
-
 /// 通过文件内容 SHA-256 哈希检测重复文件。
 actor DuplicateDetector {
     /// 在传入的文件列表中检测内容完全相同的文件。
