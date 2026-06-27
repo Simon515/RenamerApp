@@ -8,7 +8,8 @@ struct NamingEngine {
         taskID: UUID?,
         items: [FileItem],
         analyses: [FileAnalysis],
-        duplicateGroups: [DuplicateGroup]
+        duplicateGroups: [DuplicateGroup],
+        exportTargets: [ExportTarget] = []
     ) throws -> OrganizationPlan {
         let analysisByID = Dictionary(uniqueKeysWithValues: analyses.map { ($0.id, $0) })
         var operations: [PlanOperation] = []
@@ -25,7 +26,7 @@ struct NamingEngine {
             let baseName = resolve(template.fileNameTemplate, analysis: analysis)
             let uniqueName = uniqueFileName(base: baseName, ext: item.pathExtension, used: &usedNames)
             let dest = destination.appending(path: folder).appending(path: uniqueName)
-            operations.append(PlanOperation(id: UUID(), source: item.url, destination: dest, exportTargets: [], isEnabled: true))
+            operations.append(PlanOperation(id: UUID(), source: item.url, destination: dest, exportTargets: exportTargets, isEnabled: true))
         }
 
         return OrganizationPlan(id: UUID(), taskID: taskID, analyses: analyses, operations: operations, duplicateGroups: duplicateGroups)

@@ -28,7 +28,7 @@ actor LocalAnalyzer {
         return analysis
     }
 
-    private func extractText(for item: FileItem) async throws -> String {
+    func extractText(for item: FileItem) async throws -> String {
         let ext = item.pathExtension.lowercased()
         if ext == "pdf" {
             #if canImport(PDFKit)

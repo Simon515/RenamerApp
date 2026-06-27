@@ -21,7 +21,11 @@ struct CloudAnalyzer {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw AnalysisError.cloudHTTPStatus(status)
+        }
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = obj["choices"] as? [[String: Any]],
               let first = choices.first,
@@ -42,6 +46,10 @@ struct CloudAnalyzer {
         copy.category = obj["category"] as? String ?? copy.category
         copy.source = obj["source"] as? String ?? copy.source
         copy.summary = obj["summary"] as? String ?? copy.summary
+        if let dateString = obj["date"] as? String, !dateString.isEmpty {
+            let formatter = ISO8601DateFormatter()
+            copy.date = formatter.date(from: dateString)
+        }
         if let tags = obj["tags"] as? [String] { copy.tags = tags }
         if let conf = obj["confidence"] as? Double { copy.confidence = conf }
         return copy

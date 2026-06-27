@@ -9,6 +9,7 @@ final class CloudAnalyzerTests: XCTestCase {
           "category": "Invoices/2024",
           "tags": ["rent"],
           "source": "landlord",
+          "date": "2024-05-21T10:30:00Z",
           "confidence": 0.95
         }
         """
@@ -16,5 +17,8 @@ final class CloudAnalyzerTests: XCTestCase {
         let result = CloudAnalyzer(baseURL: URL(string: "http://localhost")!, apiKey: "", model: "").apply(json: json, to: base)
         XCTAssertEqual(result.title, "Invoice")
         XCTAssertEqual(result.category, "Invoices/2024")
+
+        let expectedDate = ISO8601DateFormatter().date(from: "2024-05-21T10:30:00Z")
+        XCTAssertEqual(result.date, expectedDate)
     }
 }

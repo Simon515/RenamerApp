@@ -4,6 +4,7 @@ struct FileOperationRecord: Codable, Identifiable, Sendable {
     struct Move: Codable, Sendable {
         let source: URL
         let destination: URL
+        let operation: CopyOrMove
     }
     struct Export: Codable, Sendable {
         let pluginID: String

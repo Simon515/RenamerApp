@@ -21,7 +21,12 @@ actor RollbackService {
     func rollback(record: FileOperationRecord) async throws {
         let fm = FileManager.default
         for move in record.moves {
-            try fm.moveItem(at: move.destination, to: move.source)
+            switch move.operation {
+            case .move:
+                try fm.moveItem(at: move.destination, to: move.source)
+            case .copy:
+                try fm.removeItem(at: move.destination)
+            }
         }
     }
 }

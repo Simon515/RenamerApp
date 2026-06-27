@@ -12,4 +12,5 @@ enum AnalysisError: Error, Sendable {
     case unreadable(URL)
     case unsupportedType(String)
     case cloudDecodingFailed
+    case cloudHTTPStatus(Int)
 }
