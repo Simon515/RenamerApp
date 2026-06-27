@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TaskEditorView: View {
     @Bindable var taskList: TaskListViewModel
+    @Environment(SettingsViewModel.self) private var settings
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var sourceFolders: [URL] = []
@@ -12,6 +13,8 @@ struct TaskEditorView: View {
     @State private var useDEVONthink = false
     @State private var devonthinkDatabase = ""
     @State private var devonthinkGroup = ""
+    @State private var errorMessage: String?
+    @State private var showError = false
 
     var body: some View {
         Form {
@@ -70,7 +73,13 @@ struct TaskEditorView: View {
         .padding()
         .frame(width: 500, height: 420)
         .onAppear {
+            operation = settings.defaultOperation
             selectedTemplateID = taskList.templates.first?.id
+        }
+        .alert("保存失败", isPresented: $showError) {
+            Button("确定") { showError = false }
+        } message: {
+            Text(errorMessage ?? "无法保存任务")
         }
     }
 
@@ -110,7 +119,12 @@ struct TaskEditorView: View {
             exportTargets: exportTargets,
             useCloudAI: useCloudAI
         )
-        try? taskList.add(task)
-        dismiss()
+        do {
+            try taskList.add(task)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
     }
 }

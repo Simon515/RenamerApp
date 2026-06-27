@@ -46,7 +46,7 @@ struct NamingEngine {
         if let date = analysis.date {
             let fmt = DateFormatter()
             fmt.dateFormat = "yyyyMMdd"
-            result = result.replacingOccurrences(of: "{date}", with: fmt.string(from: date))
+            result = result.replacingOccurrences(of: "{date}", with: sanitize(fmt.string(from: date)))
         } else {
             result = result.replacingOccurrences(of: "{date}", with: "nodate")
         }
@@ -74,7 +74,7 @@ struct NamingEngine {
             if let date = date {
                 let formatter = DateFormatter()
                 formatter.dateFormat = format
-                let formatted = formatter.string(from: date)
+                let formatted = sanitize(formatter.string(from: date))
                 replacement = formatted.isEmpty ? fallbackDateString(for: date) : formatted
             } else {
                 replacement = "nodate"

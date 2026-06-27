@@ -43,14 +43,32 @@ actor LocalAnalyzer {
     }
 
     /// 为减少文件读取次数，可先提取文本，再传入分析流程。
+    /// 媒体文件（图片/视频）仍独立提取元数据；文本/PDF 直接使用传入的 text。
     func analyze(item: FileItem, text: String) async throws -> FileAnalysis {
-        var analysis = try await analyze(item: item)
-        if !text.isEmpty {
-            analysis.title = inferTitle(from: text) ?? analysis.title
+        var analysis = FileAnalysis(
+            id: item.id,
+            title: nil,
+            date: item.creationDate ?? item.modificationDate,
+            category: nil,
+            tags: [],
+            source: nil,
+            summary: nil,
+            confidence: 0.5
+        )
+
+        let ext = item.pathExtension.lowercased()
+
+        if isImage(ext: ext) {
+            analysis = mergeImageMetadata(analysis: analysis, item: item)
+        } else if isVideo(ext: ext) {
+            analysis = await mergeVideoMetadata(analysis: analysis, item: item)
+        } else if !text.isEmpty {
+            analysis.title = inferTitle(from: text)
             analysis.tags = extractKeywords(from: text)
             analysis.summary = String(text.prefix(200))
-            analysis.confidence = max(analysis.confidence, 0.7)
+            analysis.confidence = 0.7
         }
+
         return analysis
     }
 

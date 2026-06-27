@@ -53,6 +53,7 @@ struct ContentView: View {
         }
         .onAppear {
             viewModel.settings = settings
+            operation = settings.defaultOperation
             try? taskList.load()
         }
         .onReceive(NotificationCenter.default.publisher(for: .renamerPickFolders)) { notification in

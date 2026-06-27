@@ -4,6 +4,17 @@ struct CloudAnalyzer {
     let baseURL: URL
     let apiKey: String
     let model: String
+    private let session: URLSession
+
+    init(baseURL: URL, apiKey: String, model: String) {
+        self.baseURL = baseURL
+        self.apiKey = apiKey
+        self.model = model
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 30
+        self.session = URLSession(configuration: configuration)
+    }
 
     func enhance(_ analysis: FileAnalysis, text: String) async throws -> FileAnalysis {
         var request = URLRequest(url: baseURL.appending(path: "v1/chat/completions"))
@@ -21,7 +32,7 @@ struct CloudAnalyzer {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             throw AnalysisError.cloudHTTPStatus(status)

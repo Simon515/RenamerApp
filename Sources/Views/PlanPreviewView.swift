@@ -45,7 +45,7 @@ struct PlanPreviewView: View {
 
                 Button("执行整理") {
                     Task {
-                        await viewModel.execute(plan: viewModel.plan!, taskName: "manual", operation: plan.operation)
+                        await viewModel.execute(plan: plan, taskName: "manual", operation: plan.operation)
                     }
                 }
             }
@@ -89,6 +89,11 @@ struct PlanPreviewView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                .onChange(of: group.keepIndex) { _, _ in
+                    Task {
+                        await viewModel.rebuildPlan()
+                    }
+                }
             }
             .padding(.vertical, 4)
         }
