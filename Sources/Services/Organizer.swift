@@ -20,12 +20,20 @@ actor Organizer {
     func execute(plan: OrganizationPlan, taskName: String, operation: CopyOrMove = .copy) async throws -> FileOperationRecord {
         var moves: [FileOperationRecord.Move] = []
         var exports: [FileOperationRecord.Export] = []
+        var skippedCount = 0
         let fm = FileManager.default
 
         do {
             for op in plan.operations where op.isEnabled {
                 let destDir = op.destination.deletingLastPathComponent()
                 try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+                // 如果目标已存在，跳过并记录，避免整批失败。
+                if fm.fileExists(atPath: op.destination.path()) {
+                    skippedCount += 1
+                    continue
+                }
+
                 switch operation {
                 case .copy:
                     try fm.copyItem(at: op.source, to: op.destination)
@@ -49,6 +57,19 @@ actor Organizer {
             throw OrganizerError(partialRecord: partialRecord, underlying: error)
         }
 
-        return FileOperationRecord(id: UUID(), timestamp: Date(), taskName: taskName, moves: moves, exports: exports)
+        let record = FileOperationRecord(id: UUID(), timestamp: Date(), taskName: taskName, moves: moves, exports: exports)
+        if skippedCount > 0 {
+            throw OrganizerError(partialRecord: record, underlying: OrganizerSkippedError(skippedCount: skippedCount))
+        }
+        return record
+    }
+}
+
+/// 表示部分操作被跳过（如目标文件已存在）的错误，用于向用户展示非致命警告。
+struct OrganizerSkippedError: Error, Sendable {
+    let skippedCount: Int
+
+    var localizedDescription: String {
+        "\(skippedCount) 个目标文件已存在，已自动跳过"
     }
 }

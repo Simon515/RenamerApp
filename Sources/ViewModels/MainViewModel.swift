@@ -33,6 +33,7 @@ final class MainViewModel {
             }
 
             let scanResult = await scanner.scan(folders: folders)
+            guard !Task.isCancelled else { return }
             let items = scanResult.items
             var analyses: [FileAnalysis] = []
             var textsByID: [UUID: String] = [:]
@@ -63,6 +64,7 @@ final class MainViewModel {
                 }
 
                 for await result in group {
+                    if Task.isCancelled { group.cancelAll(); break }
                     textsByID[result.item.id] = result.text
                     analyses.append(result.analysis)
                     if result.failed {
@@ -70,6 +72,7 @@ final class MainViewModel {
                     }
                 }
             }
+            guard !Task.isCancelled else { return }
 
             // 保持 analyses 与 items 顺序一致，便于后续计划构建。
             let analysisByID = Dictionary(uniqueKeysWithValues: analyses.map { ($0.id, $0) })
@@ -84,6 +87,7 @@ final class MainViewModel {
                 var index = 0
 
                 while index < total {
+                    if Task.isCancelled { break }
                     let batchEnd = min(index + maxConcurrentCloud, total)
                     let batchEntries = Array(index..<batchEnd).map { (
                         index: $0,
@@ -116,8 +120,10 @@ final class MainViewModel {
                     index = batchEnd
                 }
             }
+            guard !Task.isCancelled else { return }
 
             let detectionResult = await duplicateDetector.detectDuplicates(in: items)
+            guard !Task.isCancelled else { return }
             let engine = NamingEngine(template: template, destination: destination)
             lastTemplate = template
             lastDestination = destination

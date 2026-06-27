@@ -114,6 +114,7 @@ actor LocalAnalyzer {
     }
 
     /// 通过 Spotlight (`mdls`) 异步提取文档文本内容，作为 docx/pages/numbers/keynote 的简易回退。
+    /// 设置 5 秒超时，避免外部进程挂起导致分析卡死。
     private nonisolated func extractSpotlightText(url: URL) async -> String {
         await withCheckedContinuation { continuation in
             let process = Process()
@@ -121,19 +122,34 @@ actor LocalAnalyzer {
             process.arguments = ["-name", "kMDItemTextContent", "-raw", url.path()]
             let pipe = Pipe()
             process.standardOutput = pipe
+
+            let box = ResumeBox()
+            let continuationBox = ContinuationBox(continuation: continuation)
+
             process.terminationHandler = { _ in
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 guard let string = String(data: data, encoding: .utf8) else {
-                    continuation.resume(returning: "")
+                    box.resume("", continuationBox: continuationBox)
                     return
                 }
                 let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-                continuation.resume(returning: trimmed == "(null)" ? "" : trimmed)
+                box.resume(trimmed == "(null)" ? "" : trimmed, continuationBox: continuationBox)
             }
+
             do {
                 try process.run()
+                Task {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    if process.isRunning {
+                        process.terminate()
+                    }
+                    // terminationHandler 会在进程终止后完成 continuation；
+                    // 此处兜底，防止 terminationHandler 因异常未触发时 continuation 永远挂起。
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    box.resume("", continuationBox: continuationBox)
+                }
             } catch {
-                continuation.resume(returning: "")
+                box.resume("", continuationBox: continuationBox)
             }
         }
     }
@@ -264,5 +280,32 @@ actor LocalAnalyzer {
         formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
         formatter.timeZone = TimeZone.current
         return formatter.date(from: string)
+    }
+}
+
+/// 用于在多个并发回调中仅恢复一次 continuation 的线程安全盒子。
+private final class ResumeBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var resumed = false
+
+    func resume(_ value: String, continuationBox: ContinuationBox) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !resumed else { return }
+        resumed = true
+        continuationBox.resume(returning: value)
+    }
+}
+
+/// 包装 CheckedContinuation 以便在 @Sendable 闭包中传递。
+private final class ContinuationBox: @unchecked Sendable {
+    private let continuation: CheckedContinuation<String, Never>
+
+    init(continuation: CheckedContinuation<String, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning value: String) {
+        continuation.resume(returning: value)
     }
 }
