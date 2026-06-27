@@ -39,10 +39,6 @@ struct ContentView: View {
 
                 HStack {
                     Button("新建任务") { showTaskEditor = true }
-                    Spacer()
-                    Button("设置") {
-                        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                    }
                 }
             }
             .padding()

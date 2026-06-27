@@ -17,9 +17,6 @@ struct MenuBarPopover: View {
                 pickFolders()
             }
             Button("打开主窗口") { openMainWindow() }
-            Button("设置") {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            }
             Button("退出") { NSApplication.shared.terminate(nil) }
         }
         .padding()
