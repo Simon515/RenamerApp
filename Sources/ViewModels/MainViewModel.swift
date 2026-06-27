@@ -32,13 +32,14 @@ final class MainViewModel {
                 cloudConfig = settings.cloudConfiguration
             }
 
-            let items = try await scanner.scan(folders: folders)
+            let scanResult = await scanner.scan(folders: folders)
+            let items = scanResult.items
             var analyses: [FileAnalysis] = []
             var textsByID: [UUID: String] = [:]
             var failureCount = 0
 
             // 本地分析并发执行，提高大目录处理速度。
-            try await withThrowingTaskGroup(of: (item: FileItem, text: String, analysis: FileAnalysis, failed: Bool).self) { group in
+            await withTaskGroup(of: (item: FileItem, text: String, analysis: FileAnalysis, failed: Bool).self) { group in
                 for item in items {
                     group.addTask { [localAnalyzer] in
                         let text = (try? await localAnalyzer.extractText(for: item)) ?? ""
@@ -61,7 +62,7 @@ final class MainViewModel {
                     }
                 }
 
-                for try await result in group {
+                for await result in group {
                     textsByID[result.item.id] = result.text
                     analyses.append(result.analysis)
                     if result.failed {
@@ -133,6 +134,9 @@ final class MainViewModel {
             )
 
             var messages: [String] = []
+            if scanResult.inaccessibleCount > 0 {
+                messages.append("\(scanResult.inaccessibleCount) 个目录无法访问")
+            }
             if failureCount > 0 {
                 messages.append("\(failureCount) 个文件无法分析")
             }

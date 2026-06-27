@@ -51,7 +51,11 @@ struct DEVONthinkPlugin: ExportPlugin {
     }
 
     private static func appleScriptEscape(_ string: String) -> String {
-        string.replacingOccurrences(of: "\\", with: "\\\\")
-              .replacingOccurrences(of: "\"", with: "\\\"")
+        string
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
     }
 }

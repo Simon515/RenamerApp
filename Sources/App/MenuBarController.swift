@@ -2,11 +2,12 @@ import Cocoa
 import SwiftUI
 
 @MainActor
-final class MenuBarController {
+final class MenuBarController: NSObject {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
 
-    init() {
+    override init() {
+        super.init()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "folder.badge.gear", accessibilityDescription: "Renamer")
         item.button?.action = #selector(togglePopover)

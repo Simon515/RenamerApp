@@ -26,7 +26,7 @@ struct CloudAnalyzer {
             "model": model,
             "messages": [
                 ["role": "system", "content": "You are a file organization assistant. Respond only with JSON containing keys: title, date (ISO8601 or empty), category, tags (array), source, summary, confidence (0-1)."],
-                ["role": "user", "content": text.prefix(4000)]
+                ["role": "user", "content": String(text.prefix(4000))]
             ],
             "temperature": 0.2
         ]

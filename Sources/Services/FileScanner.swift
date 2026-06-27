@@ -11,27 +11,43 @@ actor FileScanner {
         ".Trash", ".fseventsd", ".Spotlight-V100", "TemporaryItems",
         ".DS_Store", ".DocumentRevisions-V100", ".PKInstallSandboxManager-SystemSoftware"
     ]
+    /// 扫描结果，包含扫描到的文件和无法访问的目录计数。
+    struct ScanResult: Sendable {
+        let items: [FileItem]
+        let inaccessibleCount: Int
+    }
+
     /// 并发扫描多个文件夹。
     /// - Parameter folders: 待扫描的目录 URL 列表。
-    /// - Returns: 所有扫描到的文件模型列表。
-    func scan(folders: [URL]) async throws -> [FileItem] {
-        try await withThrowingTaskGroup(of: [FileItem].self) { group in
+    /// - Returns: 扫描结果，包含所有扫描到的文件模型列表和无法访问的目录数。
+    func scan(folders: [URL]) async -> ScanResult {
+        await withTaskGroup(of: Result<[FileItem], Error>.self) { group in
             for folder in folders {
-                group.addTask { try await self.scan(folder: folder) }
+                group.addTask { await self.scan(folder: folder) }
             }
             var all: [FileItem] = []
-            for try await items in group {
-                all.append(contentsOf: items)
+            var inaccessible = 0
+            for await result in group {
+                switch result {
+                case .success(let items):
+                    all.append(contentsOf: items)
+                case .failure:
+                    inaccessible += 1
+                }
             }
-            return all
+            return ScanResult(items: all, inaccessibleCount: inaccessible)
         }
     }
 
     /// 递归扫描单个文件夹。
     /// - Parameter folder: 待扫描的目录 URL。
-    /// - Returns: 该目录下扫描到的文件模型列表。
-    private func scan(folder: URL) async throws -> [FileItem] {
-        try scanSynchronously(folder: folder)
+    /// - Returns: 该目录下扫描到的文件模型列表的 Result。
+    private func scan(folder: URL) async -> Result<[FileItem], Error> {
+        do {
+            return .success(try scanSynchronously(folder: folder))
+        } catch {
+            return .failure(error)
+        }
     }
 
     /// 同步执行文件枚举，避免 `DirectoryEnumerator` 在异步上下文中调用迭代器。
