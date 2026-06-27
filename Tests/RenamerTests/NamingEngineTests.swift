@@ -24,6 +24,7 @@ final class NamingEngineTests: XCTestCase {
         let plan = try engine.buildPlan(taskID: task.id, items: [item], analyses: [analysis], duplicateGroups: [])
 
         XCTAssertEqual(plan.operations.count, 1)
+        XCTAssertEqual(plan.operation, .copy)
         XCTAssertTrue(plan.operations.first!.destination.path().contains("/Docs/"))
         XCTAssertTrue(plan.operations.first!.destination.lastPathComponent.hasPrefix("Invoice"))
     }

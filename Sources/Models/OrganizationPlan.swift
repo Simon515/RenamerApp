@@ -6,4 +6,5 @@ struct OrganizationPlan: Sendable, Identifiable {
     let analyses: [FileAnalysis]
     var operations: [PlanOperation]
     let duplicateGroups: [DuplicateGroup]
+    var operation: CopyOrMove
 }

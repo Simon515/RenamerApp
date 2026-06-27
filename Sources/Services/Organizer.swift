@@ -24,8 +24,13 @@ actor Organizer {
             moves.append(FileOperationRecord.Move(source: op.source, destination: op.destination, operation: operation))
 
             for target in op.exportTargets {
-                let exportRecord = try await pluginManager.export(file: op.destination, target: target)
-                exports.append(exportRecord)
+                do {
+                    let exportRecord = try await pluginManager.export(file: op.destination, target: target)
+                    exports.append(exportRecord)
+                } catch {
+                    let pluginID = await pluginManager.pluginID(for: target) ?? "unknown"
+                    exports.append(FileOperationRecord.Export(pluginID: pluginID, details: error.localizedDescription))
+                }
             }
         }
 

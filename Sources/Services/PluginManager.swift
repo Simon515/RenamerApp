@@ -10,4 +10,8 @@ actor PluginManager {
         let details = try await plugin.export(file: file, target: target)
         return FileOperationRecord.Export(pluginID: plugin.id, details: details)
     }
+
+    func pluginID(for target: ExportTarget) -> String? {
+        plugins.first { $0.canHandle(target: target) }?.id
+    }
 }

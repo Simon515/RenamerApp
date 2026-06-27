@@ -20,17 +20,36 @@ final class MainViewModel {
 
     var cloudConfig: CloudConfiguration?
 
-    func analyze(folders: [URL], task: OrganizationTask?, template: NamingTemplate, destination: URL) async {
+    func analyze(folders: [URL], task: OrganizationTask?, template: NamingTemplate, destination: URL, operation: CopyOrMove = .copy) async {
         isAnalyzing = true
         defer { isAnalyzing = false }
         do {
             let items = try await scanner.scan(folders: folders)
             var analyses: [FileAnalysis] = []
             var textsByID: [UUID: String] = [:]
+            var failureCount = 0
             for item in items {
                 let text = (try? await localAnalyzer.extractText(for: item)) ?? ""
                 textsByID[item.id] = text
-                analyses.append(try await localAnalyzer.analyze(item: item))
+                do {
+                    analyses.append(try await localAnalyzer.analyze(item: item))
+                } catch {
+                    failureCount += 1
+                    analyses.append(FileAnalysis(
+                        id: item.id,
+                        title: item.url.deletingPathExtension().lastPathComponent,
+                        date: item.creationDate ?? item.modificationDate,
+                        category: nil,
+                        tags: [],
+                        source: nil,
+                        summary: nil,
+                        confidence: 0.0
+                    ))
+                }
+            }
+
+            if failureCount > 0 {
+                errorMessage = "\(failureCount) files could not be analyzed"
             }
 
             if task?.useCloudAI == true, let config = cloudConfig {
@@ -50,16 +69,18 @@ final class MainViewModel {
                 items: items,
                 analyses: analyses,
                 duplicateGroups: duplicates,
-                exportTargets: task?.exportTargets ?? []
+                exportTargets: task?.exportTargets ?? [],
+                operation: task?.operation ?? operation
             )
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func execute(plan: OrganizationPlan, taskName: String, operation: CopyOrMove = .copy) async {
+    func execute(plan: OrganizationPlan, taskName: String, operation: CopyOrMove? = nil) async {
+        let effectiveOperation = operation ?? plan.operation
         do {
-            let record = try await Organizer().execute(plan: plan, taskName: taskName, operation: operation)
+            let record = try await Organizer().execute(plan: plan, taskName: taskName, operation: effectiveOperation)
             try await RollbackService().save(record: record)
         } catch {
             errorMessage = error.localizedDescription

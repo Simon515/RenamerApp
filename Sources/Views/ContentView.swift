@@ -4,35 +4,45 @@ struct ContentView: View {
     @State private var viewModel = MainViewModel()
     @State private var taskList = TaskListViewModel()
     @State private var showTaskEditor = false
+    @State private var operation: CopyOrMove = .copy
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Renamer")
-                .font(.largeTitle)
-            DropZoneView { urls in
-                Task {
-                    let template = NamingTemplate(id: UUID(), name: "default", folderTemplate: "{category}", fileNameTemplate: "{date}-{title}")
-                    await viewModel.analyze(folders: urls, task: nil, template: template, destination: FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer"))
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text("Renamer")
+                    .font(.largeTitle)
+                DropZoneView { urls in
+                    Task {
+                        let template = NamingTemplate(id: UUID(), name: "default", folderTemplate: "{category}", fileNameTemplate: "{date}-{title}")
+                        await viewModel.analyze(folders: urls, task: nil, template: template, destination: FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer"), operation: operation)
+                    }
+                }
+                .frame(height: 160)
+
+                Picker("整理方式", selection: $operation) {
+                    Text("复制").tag(CopyOrMove.copy)
+                    Text("移动").tag(CopyOrMove.move)
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 200)
+
+                if let plan = viewModel.plan {
+                    NavigationLink("预览 \(plan.operations.count) 项") {
+                        PlanPreviewView(viewModel: viewModel)
+                    }
+                }
+
+                HStack {
+                    Button("新建任务") { showTaskEditor = true }
+                    Spacer()
+                    Button("设置") { /* open settings */ }
                 }
             }
-            .frame(height: 160)
-
-            if let plan = viewModel.plan {
-                NavigationLink("预览 \(plan.operations.count) 项") {
-                    PlanPreviewView(viewModel: viewModel)
-                }
+            .padding()
+            .frame(minWidth: 500, minHeight: 400)
+            .sheet(isPresented: $showTaskEditor) {
+                TaskEditorView(taskList: taskList)
             }
-
-            HStack {
-                Button("新建任务") { showTaskEditor = true }
-                Spacer()
-                Button("设置") { /* open settings */ }
-            }
-        }
-        .padding()
-        .frame(minWidth: 500, minHeight: 400)
-        .sheet(isPresented: $showTaskEditor) {
-            TaskEditorView(taskList: taskList)
         }
     }
 }

@@ -21,9 +21,10 @@ final class IntegrationTests: XCTestCase {
         }
         let groups = try await DuplicateDetector().detectDuplicates(in: items)
         let plan = try NamingEngine(template: template, destination: dest)
-            .buildPlan(taskID: nil, items: items, analyses: analyses, duplicateGroups: groups)
+            .buildPlan(taskID: nil, items: items, analyses: analyses, duplicateGroups: groups, operation: .copy)
 
         XCTAssertEqual(plan.operations.count, 1)
+        XCTAssertEqual(plan.operation, .copy)
         let record = try await Organizer().execute(plan: plan, taskName: "integration")
         XCTAssertTrue(FileManager.default.fileExists(atPath: record.moves.first!.destination.path()))
     }

@@ -46,9 +46,9 @@ struct CloudAnalyzer {
         copy.category = obj["category"] as? String ?? copy.category
         copy.source = obj["source"] as? String ?? copy.source
         copy.summary = obj["summary"] as? String ?? copy.summary
-        if let dateString = obj["date"] as? String, !dateString.isEmpty {
-            let formatter = ISO8601DateFormatter()
-            copy.date = formatter.date(from: dateString)
+        if let dateString = obj["date"] as? String, !dateString.isEmpty,
+           let parsed = ISO8601DateFormatter().date(from: dateString) {
+            copy.date = parsed
         }
         if let tags = obj["tags"] as? [String] { copy.tags = tags }
         if let conf = obj["confidence"] as? Double { copy.confidence = conf }

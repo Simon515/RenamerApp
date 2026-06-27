@@ -9,7 +9,8 @@ struct NamingEngine {
         items: [FileItem],
         analyses: [FileAnalysis],
         duplicateGroups: [DuplicateGroup],
-        exportTargets: [ExportTarget] = []
+        exportTargets: [ExportTarget] = [],
+        operation: CopyOrMove = .copy
     ) throws -> OrganizationPlan {
         let analysisByID = Dictionary(uniqueKeysWithValues: analyses.map { ($0.id, $0) })
         var operations: [PlanOperation] = []
@@ -29,7 +30,7 @@ struct NamingEngine {
             operations.append(PlanOperation(id: UUID(), source: item.url, destination: dest, exportTargets: exportTargets, isEnabled: true))
         }
 
-        return OrganizationPlan(id: UUID(), taskID: taskID, analyses: analyses, operations: operations, duplicateGroups: duplicateGroups)
+        return OrganizationPlan(id: UUID(), taskID: taskID, analyses: analyses, operations: operations, duplicateGroups: duplicateGroups, operation: operation)
     }
 
     private func resolve(_ template: String, analysis: FileAnalysis) -> String {

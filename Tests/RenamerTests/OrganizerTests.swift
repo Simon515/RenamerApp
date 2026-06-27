@@ -14,7 +14,7 @@ final class OrganizerTests: XCTestCase {
 
         let dest = dir.appending(path: "out/a.txt")
         let op = PlanOperation(id: UUID(), source: src, destination: dest, exportTargets: [], isEnabled: true)
-        let plan = OrganizationPlan(id: UUID(), taskID: nil, analyses: [], operations: [op], duplicateGroups: [])
+        let plan = OrganizationPlan(id: UUID(), taskID: nil, analyses: [], operations: [op], duplicateGroups: [], operation: .copy)
 
         let record = try await Organizer().execute(plan: plan, taskName: "test")
         XCTAssertTrue(fm.fileExists(atPath: dest.path()))
@@ -33,7 +33,7 @@ final class OrganizerTests: XCTestCase {
 
         let dest = dir.appending(path: "out/a.txt")
         let op = PlanOperation(id: UUID(), source: src, destination: dest, exportTargets: [], isEnabled: true)
-        let plan = OrganizationPlan(id: UUID(), taskID: nil, analyses: [], operations: [op], duplicateGroups: [])
+        let plan = OrganizationPlan(id: UUID(), taskID: nil, analyses: [], operations: [op], duplicateGroups: [], operation: .move)
 
         let record = try await Organizer().execute(plan: plan, taskName: "test", operation: .move)
         XCTAssertTrue(fm.fileExists(atPath: dest.path()))
@@ -52,7 +52,7 @@ final class OrganizerTests: XCTestCase {
         let dest = dir.appending(path: "out/a.txt")
         let target: ExportTarget = .devonthink(database: "TestDB", group: "Inbox")
         let op = PlanOperation(id: UUID(), source: src, destination: dest, exportTargets: [target], isEnabled: true)
-        let plan = OrganizationPlan(id: UUID(), taskID: nil, analyses: [], operations: [op], duplicateGroups: [])
+        let plan = OrganizationPlan(id: UUID(), taskID: nil, analyses: [], operations: [op], duplicateGroups: [], operation: .copy)
 
         let record = try await Organizer().execute(plan: plan, taskName: "test")
         XCTAssertEqual(record.exports.count, 1)
