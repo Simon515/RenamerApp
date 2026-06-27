@@ -2,15 +2,24 @@ import SwiftUI
 
 @main
 struct RenamerApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
         WindowGroup {
-            Text("Renamer")
-                .frame(width: 400, height: 300)
+            ContentView()
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 600, height: 500)
 
         Settings {
-            Text("Settings")
+            SettingsView()
         }
+    }
+}
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var menuBarController: MenuBarController?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        menuBarController = MenuBarController()
     }
 }
