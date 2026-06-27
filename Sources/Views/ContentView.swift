@@ -12,13 +12,24 @@ struct ContentView: View {
             VStack(spacing: 20) {
                 Text("Renamer")
                     .font(.largeTitle)
-                DropZoneView { urls in
-                    Task {
-                        let template = settings.defaultTemplate
-                        await viewModel.analyze(folders: urls, task: nil, template: template, destination: FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer"), operation: operation)
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8]))
+                    .foregroundStyle(.secondary)
+                    .frame(height: 160)
+                    .overlay {
+                        VStack(spacing: 8) {
+                            Image(systemName: "tray.and.arrow.down")
+                                .font(.system(size: 36))
+                                .foregroundStyle(.secondary)
+                            Text("拖拽文件夹到此处开始分析")
+                                .foregroundStyle(.secondary)
+                            Button("或点击选择文件夹…") { pickFolders() }
+                                .buttonStyle(.link)
+                        }
                     }
-                }
-                .frame(height: 160)
+                    .overlay {
+                        DropZoneView { urls in analyze(folders: urls) }
+                    }
 
                 Picker("整理方式", selection: $operation) {
                     Text("复制").tag(CopyOrMove.copy)
@@ -54,10 +65,7 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .renamerPickFolders)) { notification in
             guard let urls = notification.object as? [URL] else { return }
-            Task {
-                let template = settings.defaultTemplate
-                await viewModel.analyze(folders: urls, task: nil, template: template, destination: FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer"), operation: operation)
-            }
+            analyze(folders: urls)
         }
         .alert("提示", isPresented: Binding(
             get: { viewModel.errorMessage != nil || viewModel.successMessage != nil },
@@ -69,6 +77,27 @@ struct ContentView: View {
             }
         } message: {
             Text(viewModel.errorMessage ?? viewModel.successMessage ?? "")
+        }
+    }
+
+    /// 分析所选文件夹，复用主窗口默认模板与目标目录。
+    private func analyze(folders: [URL]) {
+        guard !folders.isEmpty else { return }
+        let template = settings.defaultTemplate
+        let destination = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer")
+        Task {
+            await viewModel.analyze(folders: folders, task: nil, template: template, destination: destination, operation: operation)
+        }
+    }
+
+    /// 通过 NSOpenPanel 选择文件夹，作为拖拽之外的备用入口。
+    private func pickFolders() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        if panel.runModal() == .OK {
+            analyze(folders: panel.urls)
         }
     }
 
@@ -114,32 +143,45 @@ struct ContentView: View {
     }
 }
 
+/// 文件夹拖放接收视图。
+///
+/// 直接使用自定义 `NSView` 子类重写拖放回调——`NSView` 自身即拖放目标，
+/// 不存在独立的 delegate，因此必须在视图内重写 `draggingEntered`/`performDragOperation`。
 struct DropZoneView: NSViewRepresentable {
     var onDrop: ([URL]) -> Void
 
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
+    func makeNSView(context: Context) -> FolderDropNSView {
+        let view = FolderDropNSView()
+        view.onDrop = onDrop
         view.registerForDraggedTypes([.fileURL])
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: FolderDropNSView, context: Context) {
+        nsView.onDrop = onDrop
+    }
+}
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onDrop: onDrop)
+final class FolderDropNSView: NSView {
+    var onDrop: (([URL]) -> Void)?
+
+    /// 仅接受指向目录的文件 URL。
+    private func folderURLs(from sender: NSDraggingInfo) -> [URL] {
+        let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] ?? []
+        return urls.filter { url in
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+        }
     }
 
-    @MainActor
-    class Coordinator: NSObject, NSDraggingDestination {
-        let onDrop: ([URL]) -> Void
-        init(onDrop: @escaping ([URL]) -> Void) { self.onDrop = onDrop }
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        folderURLs(from: sender).isEmpty ? [] : .copy
+    }
 
-        func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
-
-        func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-            let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] ?? []
-            onDrop(urls)
-            return true
-        }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let folders = folderURLs(from: sender)
+        guard !folders.isEmpty else { return false }
+        onDrop?(folders)
+        return true
     }
 }

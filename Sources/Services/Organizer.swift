@@ -1,11 +1,11 @@
 import Foundation
 
 /// 整理过程中发生的错误，携带已完成的操作记录以支持部分回滚。
-struct OrganizerError: Error, Sendable {
+struct OrganizerError: LocalizedError, Sendable {
     let partialRecord: FileOperationRecord
     let underlying: Error
 
-    var localizedDescription: String {
+    var errorDescription: String? {
         "整理未完成：\(underlying.localizedDescription)（已完成 \(partialRecord.moves.count) 项）"
     }
 }
@@ -66,10 +66,10 @@ actor Organizer {
 }
 
 /// 表示部分操作被跳过（如目标文件已存在）的错误，用于向用户展示非致命警告。
-struct OrganizerSkippedError: Error, Sendable {
+struct OrganizerSkippedError: LocalizedError, Sendable {
     let skippedCount: Int
 
-    var localizedDescription: String {
+    var errorDescription: String? {
         "\(skippedCount) 个目标文件已存在，已自动跳过"
     }
 }

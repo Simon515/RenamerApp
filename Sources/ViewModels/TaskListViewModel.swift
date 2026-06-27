@@ -14,7 +14,7 @@ final class TaskListViewModel {
             .first else {
             return FileManager.default.temporaryDirectory.appending(path: "renamer_tasks.json")
         }
-        return supportURL.appending(path: "tasks.json")
+        return supportURL.appending(path: "Renamer/tasks.json")
     }
 
     func load() throws {
@@ -25,6 +25,7 @@ final class TaskListViewModel {
 
     func save() throws {
         let data = try JSONEncoder().encode(tasks)
+        try FileManager.default.createDirectory(at: storageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: storageURL)
     }
 

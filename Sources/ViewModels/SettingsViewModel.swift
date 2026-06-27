@@ -97,7 +97,7 @@ final class SettingsViewModel {
             .first else {
             return FileManager.default.temporaryDirectory.appending(path: "renamer_settings.json")
         }
-        return supportURL.appending(path: "settings.json")
+        return supportURL.appending(path: "Renamer/settings.json")
     }
 }
 

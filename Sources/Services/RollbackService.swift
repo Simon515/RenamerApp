@@ -15,11 +15,11 @@ struct RollbackConflict: Sendable {
 }
 
 /// 回滚多个操作时出现部分失败或冲突时抛出的聚合错误。
-struct RollbackAggregateError: Error, Sendable {
+struct RollbackAggregateError: LocalizedError, Sendable {
     let errors: [RollbackMoveError]
     let conflicts: [RollbackConflict]
 
-    var localizedDescription: String {
+    var errorDescription: String? {
         var parts: [String] = []
         if !errors.isEmpty {
             parts.append("回滚部分失败（\(errors.count) 项）：" + errors.map { $0.underlying.localizedDescription }.joined(separator: "; "))
@@ -46,9 +46,9 @@ actor RollbackService {
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first else {
             return FileManager.default.temporaryDirectory
-                .appendingPathComponent("com.renamer.records", isDirectory: true)
+                .appendingPathComponent("Renamer/records", isDirectory: true)
         }
-        return supportURL.appendingPathComponent("com.renamer.records", isDirectory: true)
+        return supportURL.appendingPathComponent("Renamer/records", isDirectory: true)
     }
 
     func save(record: FileOperationRecord) async throws {

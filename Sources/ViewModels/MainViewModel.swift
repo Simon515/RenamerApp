@@ -206,7 +206,13 @@ final class MainViewModel {
         } catch let error as OrganizerError {
             // 即使整理中途失败，也要保存已完成操作的记录以便部分回滚。
             try? await RollbackService().save(record: error.partialRecord)
-            errorMessage = error.localizedDescription
+            if let skipped = error.underlying as? OrganizerSkippedError {
+                // 仅有“目标已存在被跳过”属于非致命情况：整理实际已完成，视为成功并附带提示。
+                self.plan = nil
+                successMessage = "整理完成，已处理 \(error.partialRecord.moves.count) 个文件；\(skipped.skippedCount) 个目标已存在被跳过"
+            } else {
+                errorMessage = error.localizedDescription
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

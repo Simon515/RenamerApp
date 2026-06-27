@@ -92,9 +92,20 @@ struct NamingEngine {
         return fmt.string(from: date)
     }
 
+    /// 清理模板替换值，使其可以安全地作为路径使用。
+    ///
+    /// 注意：此函数**保留** `/` 作为路径分隔符，以支持 folder 模板生成动态子目录
+    ///（例如 `Invoices/{category}/{date:yyyy/MM}`）。若只需要单个文件名，请在使用前
+    /// 自行取最后一段路径组件。`.` 与 `..` 会被替换为 `_`，避免逃离目标根目录。
     private func sanitize(_ string: String) -> String {
-        let invalid = CharacterSet(charactersIn: "/:?%*|\"<>")
-        return string.components(separatedBy: invalid).joined(separator: "_")
+        let invalid = CharacterSet(charactersIn: ":?%*|\"<>")
+        let sanitized = string.components(separatedBy: invalid).joined(separator: "_")
+        let components = sanitized.split(separator: "/", omittingEmptySubsequences: false)
+            .map { component -> String in
+                let rawComponent = String(component)
+                return (rawComponent.isEmpty || rawComponent == "." || rawComponent == "..") ? "_" : rawComponent
+            }
+        return components.joined(separator: "/")
     }
 
     private func uniqueFileName(base: String, ext: String, used: inout Set<String>) -> String {
