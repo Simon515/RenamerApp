@@ -133,7 +133,11 @@ actor RollbackService {
         guard dated.count > count else { return }
 
         for entry in dated.dropFirst(count) {
-            try? fm.removeItem(at: entry.url)
+            do {
+                try fm.removeItem(at: entry.url)
+            } catch {
+                Log.rollback.error("裁剪旧回滚记录失败：\(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 }

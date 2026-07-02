@@ -202,6 +202,7 @@ struct AnalysisPipeline: Sendable {
                         let enhanced = try await cloudAnalyzer.enhance(analysis, text: text)
                         return (index, enhanced, true)
                     } catch {
+                        Log.pipeline.error("云端增强失败：\(error.localizedDescription, privacy: .public)")
                         return (index, analysis, false)
                     }
                 }

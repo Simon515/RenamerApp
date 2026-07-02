@@ -56,6 +56,7 @@ actor Organizer {
                         exports.append(exportRecord)
                     } catch {
                         let pluginID = await pluginManager.pluginID(for: target) ?? "unknown"
+                        Log.organizer.error("导出失败 [\(pluginID, privacy: .public)]：\(error.localizedDescription, privacy: .public)")
                         exports.append(FileOperationRecord.Export(pluginID: pluginID, details: error.localizedDescription))
                     }
                 }
