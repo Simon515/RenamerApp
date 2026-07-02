@@ -6,8 +6,16 @@ struct PlanPreviewView: View {
     var body: some View {
         VStack {
             if let plan = viewModel.plan {
-                Text("共 \(plan.operations.count) 项操作")
-                    .font(.headline)
+                VStack(spacing: 8) {
+                    Text("共 \(plan.operations.count) 项操作")
+                        .font(.headline)
+
+                    HStack(spacing: 16) {
+                        StatBadge(label: "已启用", value: "\(plan.operations.filter(\.isEnabled).count)")
+                        StatBadge(label: "重复组", value: "\(plan.duplicateGroups.count)")
+                        StatBadge(label: "平均置信度", value: averageConfidenceText)
+                    }
+                }
 
                 Picker("整理方式", selection: Binding(
                     get: { plan.operation },
@@ -48,6 +56,12 @@ struct PlanPreviewView: View {
         .padding()
         .frame(minWidth: 700, minHeight: 500)
         .userMessageAlert($viewModel.userMessage)
+    }
+
+    private var averageConfidenceText: String {
+        guard let plan = viewModel.plan, !plan.analyses.isEmpty else { return "-" }
+        let avg = plan.analyses.map(\.confidence).reduce(0, +) / Double(plan.analyses.count)
+        return avg.formatted(.percent.precision(.fractionLength(0)))
     }
 
     private var planOperationsBinding: Binding<[PlanOperation]> {
@@ -92,6 +106,22 @@ struct PlanPreviewView: View {
             get: { viewModel.plan?.duplicateGroups ?? [] },
             set: { viewModel.plan?.duplicateGroups = $0 }
         )
+    }
+}
+
+private struct StatBadge: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.callout.weight(.semibold))
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(minWidth: 60)
     }
 }
 
