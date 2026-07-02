@@ -82,5 +82,28 @@ final class RollbackServiceTests: XCTestCase {
         }
         XCTAssertNotNil(thrown)
         XCTAssertFalse(fm.fileExists(atPath: destination1.path()))
+    func testListAndDeleteRecords() async throws {
+        let dir = fm.temporaryDirectory.appending(path: UUID().uuidString)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+
+        let record = FileOperationRecord(
+            id: UUID(),
+            timestamp: Date(),
+            taskName: "list-test",
+            moves: [],
+            exports: []
+        )
+
+        let service = RollbackService(recordsURL: dir)
+        try await service.save(record: record)
+
+        let listed = await service.listRecords()
+        XCTAssertEqual(listed.count, 1)
+        XCTAssertEqual(listed.first?.taskName, "list-test")
+
+        try await service.deleteRecord(id: record.id)
+        let afterDelete = await service.listRecords()
+        XCTAssertTrue(afterDelete.isEmpty)
     }
 }

@@ -5,6 +5,7 @@ struct ContentView: View {
     @State private var viewModel = MainViewModel()
     @State private var taskList = TaskListViewModel()
     @State private var showTaskEditor = false
+    @State private var showHistory = false
     @State private var operation: CopyOrMove = .copy
 
     var body: some View {
@@ -62,12 +63,17 @@ struct ContentView: View {
 
                 HStack {
                     Button("新建任务") { showTaskEditor = true }
+                    Spacer()
+                    Button("历史记录") { showHistory = true }
                 }
             }
             .padding()
             .frame(minWidth: 500, minHeight: 400)
             .sheet(isPresented: $showTaskEditor) {
                 TaskEditorView(taskList: taskList)
+            }
+            .sheet(isPresented: $showHistory) {
+                HistoryView()
             }
         }
         .onAppear {

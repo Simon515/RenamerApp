@@ -62,28 +62,46 @@ actor RollbackService {
         await pruneRecords(keeping: 50)
     }
 
+    /// 列出所有已保存的操作记录，按时间倒序排列。
+    func listRecords() async -> [FileOperationRecord] {
+        let fm = FileManager.default
+        guard let urls = try? fm.contentsOfDirectory(
+            at: recordsURL,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: .skipsHiddenFiles
+        ) else { return [] }
+
+        let decoder = JSONDecoder()
+        return urls
+            .compactMap { url -> (record: FileOperationRecord, date: Date)? in
+                guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                      let date = values.contentModificationDate,
+                      let data = try? Data(contentsOf: url),
+                      let record = try? decoder.decode(FileOperationRecord.self, from: data) else {
+                    return nil
+                }
+                return (record, date)
+            }
+            .sorted { $0.date > $1.date }
+            .map { $0.record }
+    }
+
+    /// 删除指定 ID 的操作记录文件；用于回滚成功后清理。
+    func deleteRecord(id: UUID) async throws {
+        let fm = FileManager.default
+        let url = recordsURL.appending(path: "\(id.uuidString).json")
+        try fm.removeItem(at: url)
+    }
+
     func rollback(record: FileOperationRecord) async throws {
         let fm = FileManager.default
         var failures: [RollbackMoveError] = []
         var conflicts: [RollbackConflict] = []
 
-        for move in record.moves {
+        // 按原始操作逆序回滚，尽量保持文件系统一致性。
+        for move in record.moves.reversed() {
             do {
-                switch move.operation {
-                case .move:
-                    // 若源文件已被覆盖或不存在，则尝试创建中间目录后移动。
-                    let destDir = move.source.deletingLastPathComponent()
-                    try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
-                    if fm.fileExists(atPath: move.source.path()) {
-                        let resolvedURL = makeConflictURL(for: move.source, fm: fm)
-                        try fm.moveItem(at: move.destination, to: resolvedURL)
-                        conflicts.append(RollbackConflict(expectedSource: move.source, destination: move.destination, resolvedAt: resolvedURL))
-                    } else {
-                        try fm.moveItem(at: move.destination, to: move.source)
-                    }
-                case .copy:
-                    try fm.removeItem(at: move.destination)
-                }
+                try rollback(move: move, fm: fm, failures: &failures, conflicts: &conflicts)
             } catch {
                 failures.append(RollbackMoveError(source: move.source, destination: move.destination, underlying: error))
             }
@@ -91,6 +109,24 @@ actor RollbackService {
 
         if !failures.isEmpty || !conflicts.isEmpty {
             throw RollbackAggregateError(errors: failures, conflicts: conflicts)
+        }
+    }
+
+    private func rollback(move: FileOperationRecord.Move, fm: FileManager, failures: inout [RollbackMoveError], conflicts: inout [RollbackConflict]) throws {
+        switch move.operation {
+        case .move:
+            // 若源文件已被覆盖或不存在，则尝试创建中间目录后移动。
+            let destDir = move.source.deletingLastPathComponent()
+            try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+            if fm.fileExists(atPath: move.source.path()) {
+                let resolvedURL = makeConflictURL(for: move.source, fm: fm)
+                try fm.moveItem(at: move.destination, to: resolvedURL)
+                conflicts.append(RollbackConflict(expectedSource: move.source, destination: move.destination, resolvedAt: resolvedURL))
+            } else {
+                try fm.moveItem(at: move.destination, to: move.source)
+            }
+        case .copy:
+            try fm.removeItem(at: move.destination)
         }
     }
 
