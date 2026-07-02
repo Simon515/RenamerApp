@@ -82,6 +82,8 @@ final class RollbackServiceTests: XCTestCase {
         }
         XCTAssertNotNil(thrown)
         XCTAssertFalse(fm.fileExists(atPath: destination1.path()))
+    }
+
     func testListAndDeleteRecords() async throws {
         let dir = fm.temporaryDirectory.appending(path: UUID().uuidString)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
