@@ -6,6 +6,7 @@ import SwiftUI
 final class MainViewModel {
     var plan: OrganizationPlan?
     var isAnalyzing = false
+    var progress: AnalysisProgress?
     var userMessage: UserMessage?
     var settings: SettingsViewModel?
 
@@ -15,9 +16,14 @@ final class MainViewModel {
     private var lastRequest: AnalysisRequest?
     private var lastItems: [FileItem]?
 
-    func analyze(folders: [URL], task: OrganizationTask?, template: NamingTemplate, destination: URL, operation: CopyOrMove = .copy) async {
-        isAnalyzing = true
-        defer { isAnalyzing = false }
+    /// 当前正在运行的分析任务；用于支持取消。
+    private var analysisTask: Task<Void, Never>?
+
+    /// 开始分析指定文件夹或任务。
+    /// 该方法会返回一次；取消请调用 `cancelAnalysis()`。
+    func analyze(folders: [URL], task: OrganizationTask?, template: NamingTemplate, destination: URL, operation: CopyOrMove = .copy) {
+        cancelAnalysis()
+        plan = nil
 
         let request = AnalysisRequest(
             folders: folders,
@@ -29,33 +35,53 @@ final class MainViewModel {
             cloudConfig: task?.useCloudAI == true ? settings?.cloudConfiguration : nil
         )
 
-        do {
-            let outcome = try await pipeline.run(request) { _ in }
-            lastRequest = request
-            lastItems = outcome.items
-            plan = outcome.plan
+        let task = Task {
+            isAnalyzing = true
+            defer {
+                isAnalyzing = false
+                analysisTask = nil
+            }
 
-            var messages: [String] = []
-            if outcome.inaccessibleDirectoryCount > 0 {
-                messages.append("\(outcome.inaccessibleDirectoryCount) 个目录无法访问")
+            do {
+                let outcome = try await pipeline.run(request) { [weak self] progress in
+                    Task { @MainActor [weak self] in
+                        self?.progress = progress
+                    }
+                }
+                lastRequest = request
+                lastItems = outcome.items
+                plan = outcome.plan
+
+                var messages: [String] = []
+                if outcome.inaccessibleDirectoryCount > 0 {
+                    messages.append("\(outcome.inaccessibleDirectoryCount) 个目录无法访问")
+                }
+                if outcome.analysisFailureCount > 0 {
+                    messages.append("\(outcome.analysisFailureCount) 个文件无法分析")
+                }
+                if outcome.hashFailureCount > 0 {
+                    messages.append("\(outcome.hashFailureCount) 个文件无法计算哈希以检测重复")
+                }
+                if outcome.cloudFailureCount > 0 {
+                    messages.append("云端增强失败 \(outcome.cloudFailureCount) 个文件")
+                }
+                if !messages.isEmpty {
+                    userMessage = .error(messages.joined(separator: "\n"))
+                }
+            } catch is CancellationError {
+                // 用户取消：静默返回，不视为错误。
+                Log.pipeline.info("分析已被用户取消")
+            } catch {
+                userMessage = .error(error.localizedDescription)
             }
-            if outcome.analysisFailureCount > 0 {
-                messages.append("\(outcome.analysisFailureCount) 个文件无法分析")
-            }
-            if outcome.hashFailureCount > 0 {
-                messages.append("\(outcome.hashFailureCount) 个文件无法计算哈希以检测重复")
-            }
-            if outcome.cloudFailureCount > 0 {
-                messages.append("云端增强失败 \(outcome.cloudFailureCount) 个文件")
-            }
-            if !messages.isEmpty {
-                userMessage = .error(messages.joined(separator: "\n"))
-            }
-        } catch is CancellationError {
-            // 用户取消：静默返回，不视为错误。
-        } catch {
-            userMessage = .error(error.localizedDescription)
         }
+        analysisTask = task
+    }
+
+    /// 取消正在进行的分析（如果存在）。
+    func cancelAnalysis() {
+        analysisTask?.cancel()
+        analysisTask = nil
     }
 
     /// 当用户在预览中调整重复文件保留项时，使用原始参数重建操作列表。

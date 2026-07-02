@@ -37,6 +37,18 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 200)
+                .disabled(viewModel.isAnalyzing)
+
+                if viewModel.isAnalyzing, let progress = viewModel.progress {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                        Text(progress.label)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button("取消") { viewModel.cancelAnalysis() }
+                            .buttonStyle(.link)
+                    }
+                }
 
                 if let plan = viewModel.plan {
                     NavigationLink("预览 \(plan.operations.count) 项") {
@@ -75,9 +87,7 @@ struct ContentView: View {
         guard !folders.isEmpty else { return }
         let template = settings.defaultTemplate
         let destination = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer")
-        Task {
-            await viewModel.analyze(folders: folders, task: nil, template: template, destination: destination, operation: operation)
-        }
+        viewModel.analyze(folders: folders, task: nil, template: template, destination: destination, operation: operation)
     }
 
     /// 通过 NSOpenPanel 选择文件夹，作为拖拽之外的备用入口。
@@ -98,16 +108,14 @@ struct ContentView: View {
                 .font(.headline)
             ForEach(taskList.tasks) { task in
                 Button {
-                    Task {
-                        if let template = settings.templates.first(where: { $0.id == task.templateID }) {
-                            await viewModel.analyze(
-                                folders: task.sourceFolders,
-                                task: task,
-                                template: template,
-                                destination: task.destinationFolder,
-                                operation: task.operation
-                            )
-                        }
+                    if let template = settings.templates.first(where: { $0.id == task.templateID }) {
+                        viewModel.analyze(
+                            folders: task.sourceFolders,
+                            task: task,
+                            template: template,
+                            destination: task.destinationFolder,
+                            operation: task.operation
+                        )
                     }
                 } label: {
                     HStack {
