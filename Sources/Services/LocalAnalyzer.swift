@@ -10,42 +10,15 @@ import ImageIO
 import AVFoundation
 #endif
 
-actor LocalAnalyzer {
-    nonisolated func analyze(item: FileItem) async throws -> FileAnalysis {
-        var analysis = FileAnalysis(
-            id: item.id,
-            title: nil,
-            date: item.creationDate ?? item.modificationDate,
-            category: nil,
-            tags: [],
-            source: nil,
-            summary: nil,
-            confidence: 0.5
-        )
-
-        let ext = item.pathExtension.lowercased()
-
-        if isImage(ext: ext) {
-            analysis = mergeImageMetadata(analysis: analysis, item: item)
-        } else if isVideo(ext: ext) {
-            analysis = await mergeVideoMetadata(analysis: analysis, item: item)
-        } else {
-            let text = try await extractText(for: item)
-            if !text.isEmpty {
-                analysis.title = inferTitle(from: text)
-                analysis.tags = extractNamedEntities(from: text)
-                analysis.summary = String(text.prefix(200))
-                analysis.confidence = 0.7
-            }
-        }
-
-        analysis.category = inferLocalCategory(for: item)
-        return analysis
+struct LocalAnalyzer: Sendable {
+    /// 便捷入口：自动提取文本后分析。媒体文件的文本提取为空操作，行为与直接分析一致。
+    func analyze(item: FileItem) async throws -> FileAnalysis {
+        try await analyze(item: item, text: extractText(for: item))
     }
 
     /// 为减少文件读取次数，可先提取文本，再传入分析流程。
     /// 媒体文件（图片/视频）仍独立提取元数据；文本/PDF 直接使用传入的 text。
-    nonisolated func analyze(item: FileItem, text: String) async throws -> FileAnalysis {
+    func analyze(item: FileItem, text: String) async throws -> FileAnalysis {
         var analysis = FileAnalysis(
             id: item.id,
             title: nil,
@@ -74,7 +47,7 @@ actor LocalAnalyzer {
         return analysis
     }
 
-    nonisolated func extractText(for item: FileItem) async throws -> String {
+    func extractText(for item: FileItem) async throws -> String {
         let ext = item.pathExtension.lowercased()
         if ext == "pdf" {
             #if canImport(PDFKit)
@@ -93,7 +66,7 @@ actor LocalAnalyzer {
     }
 
     #if canImport(PDFKit)
-    private nonisolated func extractPDFText(url: URL) -> String {
+    private func extractPDFText(url: URL) -> String {
         guard let doc = PDFDocument(url: url) else { return "" }
         var text = ""
         let pages = min(doc.pageCount, 10)
@@ -105,7 +78,7 @@ actor LocalAnalyzer {
     }
     #endif
 
-    private nonisolated func extractRTFText(url: URL) -> String {
+    private func extractRTFText(url: URL) -> String {
         guard let data = try? Data(contentsOf: url),
               let attributed = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil) else {
             return ""
@@ -115,7 +88,7 @@ actor LocalAnalyzer {
 
     /// 通过 Spotlight (`mdls`) 异步提取文档文本内容，作为 docx/pages/numbers/keynote 的简易回退。
     /// 设置 5 秒超时，避免外部进程挂起导致分析卡死。
-    private nonisolated func extractSpotlightText(url: URL) async -> String {
+    private func extractSpotlightText(url: URL) async -> String {
         await withCheckedContinuation { continuation in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/mdls")
@@ -154,12 +127,12 @@ actor LocalAnalyzer {
         }
     }
 
-    private nonisolated func inferTitle(from text: String) -> String? {
+    private func inferTitle(from text: String) -> String? {
         let lines = text.split(whereSeparator: \.isNewline).map(String.init)
         return lines.first { $0.count > 5 && $0.count < 200 }
     }
 
-    private nonisolated func extractNamedEntities(from text: String) -> [String] {
+    private func extractNamedEntities(from text: String) -> [String] {
         let tagger = NLTagger(tagSchemes: [.nameType])
         tagger.string = text
         var names: [String] = []
@@ -172,16 +145,16 @@ actor LocalAnalyzer {
         return Array(names.prefix(10))
     }
 
-    private nonisolated func isImage(ext: String) -> Bool {
+    private func isImage(ext: String) -> Bool {
         ["jpg", "jpeg", "png", "heic", "tiff", "tif", "bmp", "gif", "webp"].contains(ext)
     }
 
-    private nonisolated func isVideo(ext: String) -> Bool {
+    private func isVideo(ext: String) -> Bool {
         ["mp4", "mov", "m4v", "avi", "mkv", "wmv", "flv", "webm"].contains(ext)
     }
 
     /// 基于扩展名推断本地分类，用于在未启用云端增强时填充 `{category}` 模板。
-    private nonisolated func inferLocalCategory(for item: FileItem) -> String? {
+    private func inferLocalCategory(for item: FileItem) -> String? {
         let ext = item.pathExtension.lowercased()
         if isImage(ext: ext) { return "Images" }
         if isVideo(ext: ext) { return "Videos" }
@@ -194,7 +167,7 @@ actor LocalAnalyzer {
     }
 
     /// 使用 ImageIO 提取图片 EXIF/TIFF 等元数据。
-    private nonisolated func mergeImageMetadata(analysis: FileAnalysis, item: FileItem) -> FileAnalysis {
+    private func mergeImageMetadata(analysis: FileAnalysis, item: FileItem) -> FileAnalysis {
         var copy = analysis
         #if canImport(ImageIO)
         guard let source = CGImageSourceCreateWithURL(item.url as CFURL, nil) else { return copy }
@@ -234,7 +207,7 @@ actor LocalAnalyzer {
     }
 
     /// 使用 AVFoundation 提取视频时长、创建日期等元数据。
-    private nonisolated func mergeVideoMetadata(analysis: FileAnalysis, item: FileItem) async -> FileAnalysis {
+    private func mergeVideoMetadata(analysis: FileAnalysis, item: FileItem) async -> FileAnalysis {
         var copy = analysis
         #if canImport(AVFoundation)
         let asset = AVAsset(url: item.url)
@@ -275,7 +248,7 @@ actor LocalAnalyzer {
         return copy
     }
 
-    private nonisolated func parseEXIFDate(_ string: String) -> Date? {
+    private func parseEXIFDate(_ string: String) -> Date? {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
         formatter.timeZone = TimeZone.current
