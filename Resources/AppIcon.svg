@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" rx="180" fill="#3D7EFF" />
+  <path d="M320 360h384a40 40 0 0 1 40 40v340a40 40 0 0 1-40 40H320a40 40 0 0 1-40-40V400a40 40 0 0 1 40-40z" fill="#FFFFFF" opacity="0.95" />
+  <path d="M512 280c-80 0-150 48-184 120h368c-34-72-104-120-184-120z" fill="#FFFFFF" opacity="0.9" />
+  <circle cx="720" cy="300" r="60" fill="#FFCC00" />
+  <text x="512" y="640" text-anchor="middle" font-family="SF Pro Display, system-ui, sans-serif" font-size="220" font-weight="600" fill="#3D7EFF">Aa</text>
+</svg>
