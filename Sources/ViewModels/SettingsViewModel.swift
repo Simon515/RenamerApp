@@ -10,6 +10,11 @@ final class SettingsViewModel {
     var cloudBaseURL: String = ""
     var cloudAPIKey: String = ""
     var cloudModel: String = ""
+    /// Keychain 相关操作的错误提示（如写入失败），供 UI 展示。
+    var keychainError: String?
+
+    private static let keychain = KeychainStore(service: "com.renamer.credentials")
+    private static let apiKeyAccount = "cloud-api-key"
 
     let providerPresets: [(name: String, baseURL: String, model: String)] = [
         ("DeepSeek", "https://api.deepseek.com", "deepseek-chat"),
@@ -54,16 +59,28 @@ final class SettingsViewModel {
         save()
     }
 
-    /// 将当前设置持久化到 Application Support 的 JSON 文件。
-    /// 注意：API Key 目前以明文保存在应用沙箱目录中；后续应迁移到 Keychain。
+    /// 将当前设置持久化：API Key 存入 Keychain，其余字段存入 Application Support 的 JSON。
     func save() {
+        // API Key 写入 Keychain；失败不中断其它设置保存，仅记录错误供 UI 展示。
         do {
+            if cloudAPIKey.isEmpty {
+                try Self.keychain.delete(account: Self.apiKeyAccount)
+            } else {
+                try Self.keychain.write(account: Self.apiKeyAccount, value: cloudAPIKey)
+            }
+            keychainError = nil
+        } catch {
+            Log.settings.error("API Key 写入 Keychain 失败：\(error.localizedDescription, privacy: .public)")
+            keychainError = error.localizedDescription
+        }
+
+        do {
+            // JSON 中不再包含 API Key。
             let payload = SettingsPayload(
                 templates: templates,
                 defaultTemplateID: defaultTemplateID,
                 defaultOperation: defaultOperation,
                 cloudBaseURL: cloudBaseURL,
-                cloudAPIKey: cloudAPIKey,
                 cloudModel: cloudModel
             )
             let data = try JSONEncoder().encode(payload)
@@ -71,23 +88,43 @@ final class SettingsViewModel {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: url)
         } catch {
-            // 设置保存失败不阻断主流程；可在后续版本加入日志。
+            Log.settings.error("设置保存失败：\(error.localizedDescription, privacy: .public)")
         }
     }
 
     /// 从持久化存储加载设置；失败时保持默认值。
+    /// 首次运行若检测到旧版 JSON 中的明文 API Key，则迁移到 Keychain 并重写 JSON 清除明文。
     func load() {
+        var payloadCloudBaseURL = ""
+        var payloadCloudModel = ""
+        var legacyPlaintextKey: String?
+
         do {
             let data = try Data(contentsOf: Self.settingsURL)
-            let payload = try JSONDecoder().decode(SettingsPayload.self, from: data)
-            templates = payload.templates.isEmpty ? SettingsViewModel.defaultTemplates : payload.templates
+            // 用兼容旧字段的 payload 解码，以便读取可能存在的遗留明文 key。
+            let payload = try JSONDecoder().decode(LegacySettingsPayload.self, from: data)
+            templates = (payload.templates?.isEmpty ?? true) ? SettingsViewModel.defaultTemplates : payload.templates!
             defaultTemplateID = payload.defaultTemplateID ?? templates.first?.id
-            defaultOperation = payload.defaultOperation
-            cloudBaseURL = payload.cloudBaseURL
-            cloudAPIKey = payload.cloudAPIKey
-            cloudModel = payload.cloudModel
+            defaultOperation = payload.defaultOperation ?? .copy
+            payloadCloudBaseURL = payload.cloudBaseURL ?? ""
+            payloadCloudModel = payload.cloudModel ?? ""
+            legacyPlaintextKey = payload.cloudAPIKey
         } catch {
             // 无历史设置或解析失败时使用默认值。
+        }
+
+        cloudBaseURL = payloadCloudBaseURL
+        cloudModel = payloadCloudModel
+
+        // 优先从 Keychain 读取 API Key。
+        let keychainKey = (try? Self.keychain.read(account: Self.apiKeyAccount)) ?? nil
+        if let keychainKey, !keychainKey.isEmpty {
+            cloudAPIKey = keychainKey
+        } else if let legacyPlaintextKey, !legacyPlaintextKey.isEmpty {
+            // 迁移：写入 Keychain，随后 save() 会重写 JSON（新格式无 key 字段），清除明文。
+            cloudAPIKey = legacyPlaintextKey
+            Log.settings.info("检测到旧版明文 API Key，正在迁移到 Keychain")
+            save()
         }
     }
 
@@ -101,11 +138,21 @@ final class SettingsViewModel {
     }
 }
 
+/// 当前设置持久化格式（不含 API Key，key 存于 Keychain）。
 private struct SettingsPayload: Codable {
     var templates: [NamingTemplate]
     var defaultTemplateID: UUID?
     var defaultOperation: CopyOrMove
     var cloudBaseURL: String
-    var cloudAPIKey: String
     var cloudModel: String
+}
+
+/// 兼容旧版格式的解码用 payload：全部字段可选，用于读取可能存在的遗留明文 `cloudAPIKey`。
+private struct LegacySettingsPayload: Decodable {
+    var templates: [NamingTemplate]?
+    var defaultTemplateID: UUID?
+    var defaultOperation: CopyOrMove?
+    var cloudBaseURL: String?
+    var cloudAPIKey: String?
+    var cloudModel: String?
 }

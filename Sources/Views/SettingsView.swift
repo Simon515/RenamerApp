@@ -143,6 +143,15 @@ struct SettingsView: View {
             TextField("Model", text: $settings.cloudModel)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { settings.save() }
+
+            Text("API Key 安全存储于系统钥匙串（Keychain）。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let keychainError = settings.keychainError {
+                Text(keychainError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         }
         .padding()
     }
