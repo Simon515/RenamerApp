@@ -26,7 +26,7 @@ final class IntegrationTests: XCTestCase {
 
         XCTAssertEqual(plan.operations.count, 1)
         XCTAssertEqual(plan.operation, .copy)
-        let record = try await Organizer().execute(plan: plan, taskName: "integration")
+        let record = try await Organizer().execute(plan: plan, taskName: "integration").record
         XCTAssertTrue(FileManager.default.fileExists(atPath: record.moves.first!.destination.path()))
     }
 }

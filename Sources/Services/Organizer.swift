@@ -10,6 +10,12 @@ struct OrganizerError: LocalizedError, Sendable {
     }
 }
 
+/// 整理执行结果：操作记录 + 因目标已存在而跳过的数量（非致命）。
+struct ExecutionResult: Sendable {
+    let record: FileOperationRecord
+    let skippedCount: Int
+}
+
 actor Organizer {
     private let pluginManager: PluginManager
 
@@ -17,7 +23,9 @@ actor Organizer {
         self.pluginManager = pluginManager
     }
 
-    func execute(plan: OrganizationPlan, taskName: String, operation: CopyOrMove = .copy) async throws -> FileOperationRecord {
+    /// 执行整理计划。成功（含目标已存在被跳过）返回 `ExecutionResult`；
+    /// 中途发生真正的文件系统错误时抛 `OrganizerError`，携带已完成操作的记录以支持部分回滚。
+    func execute(plan: OrganizationPlan, taskName: String, operation: CopyOrMove = .copy) async throws -> ExecutionResult {
         var moves: [FileOperationRecord.Move] = []
         var exports: [FileOperationRecord.Export] = []
         var skippedCount = 0
@@ -58,18 +66,6 @@ actor Organizer {
         }
 
         let record = FileOperationRecord(id: UUID(), timestamp: Date(), taskName: taskName, moves: moves, exports: exports)
-        if skippedCount > 0 {
-            throw OrganizerError(partialRecord: record, underlying: OrganizerSkippedError(skippedCount: skippedCount))
-        }
-        return record
-    }
-}
-
-/// 表示部分操作被跳过（如目标文件已存在）的错误，用于向用户展示非致命警告。
-struct OrganizerSkippedError: LocalizedError, Sendable {
-    let skippedCount: Int
-
-    var errorDescription: String? {
-        "\(skippedCount) 个目标文件已存在，已自动跳过"
+        return ExecutionResult(record: record, skippedCount: skippedCount)
     }
 }

@@ -92,25 +92,20 @@ final class MainViewModel {
         let effectiveOperation = operation ?? plan.operation
         do {
             let enabledCount = plan.operations.filter(\.isEnabled).count
-            let record = try await Organizer().execute(plan: plan, taskName: taskName, operation: effectiveOperation)
+            let result = try await Organizer().execute(plan: plan, taskName: taskName, operation: effectiveOperation)
+            let skippedSuffix = result.skippedCount > 0 ? "；\(result.skippedCount) 个目标已存在被跳过" : ""
             do {
-                try await RollbackService().save(record: record)
+                try await RollbackService().save(record: result.record)
                 self.plan = nil
-                successMessage = "整理完成，已处理 \(record.moves.count) 个文件（启用 \(enabledCount) 项）"
+                successMessage = "整理完成，已处理 \(result.record.moves.count) 个文件（启用 \(enabledCount) 项）\(skippedSuffix)"
             } catch {
                 // 整理已成功，但回滚记录保存失败；保留计划以便用户知晓并自行处理。
                 errorMessage = "整理已完成，但回滚记录保存失败：\(error.localizedDescription)"
             }
         } catch let error as OrganizerError {
-            // 即使整理中途失败，也要保存已完成操作的记录以便部分回滚。
+            // 整理中途真失败：保存已完成操作的记录以便部分回滚，并报错。
             try? await RollbackService().save(record: error.partialRecord)
-            if let skipped = error.underlying as? OrganizerSkippedError {
-                // 仅有“目标已存在被跳过”属于非致命情况：整理实际已完成，视为成功并附带提示。
-                self.plan = nil
-                successMessage = "整理完成，已处理 \(error.partialRecord.moves.count) 个文件；\(skipped.skippedCount) 个目标已存在被跳过"
-            } else {
-                errorMessage = error.localizedDescription
-            }
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }
