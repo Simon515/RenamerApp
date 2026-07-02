@@ -184,41 +184,42 @@ struct AnalysisPipeline: Sendable {
         var completed = 0
         onProgress(.enhancing(completed: 0, total: total))
 
-        var index = 0
-        while index < total {
-            try Task.checkCancellation()
-            let batchEnd = min(index + maxConcurrentCloud, total)
-            let batchEntries = Array(index..<batchEnd).map { (
-                index: $0,
-                analysis: result[$0],
-                text: textsByID[result[$0].id] ?? ""
-            ) }
-            let batchResults: [(index: Int, analysis: FileAnalysis, succeeded: Bool)] = await withTaskGroup(of: (Int, FileAnalysis, Bool).self) { group in
-                for entry in batchEntries {
-                    group.addTask {
-                        do {
-                            let enhanced = try await cloudAnalyzer.enhance(entry.analysis, text: entry.text)
-                            return (entry.index, enhanced, true)
-                        } catch {
-                            return (entry.index, entry.analysis, false)
-                        }
+        // 滑动窗口并发：始终保持最多 maxConcurrentCloud 个在途请求，
+        // 每完成一个立即补发下一个，避免慢请求阻塞整批。
+        try await withThrowingTaskGroup(of: (Int, FileAnalysis, Bool).self) { group in
+            var nextIndex = 0
+            var running = 0
+
+            func launchNext() {
+                guard running < maxConcurrentCloud, nextIndex < total else { return }
+                let index = nextIndex
+                let analysis = result[index]
+                let text = textsByID[analysis.id] ?? ""
+                nextIndex += 1
+                running += 1
+                group.addTask {
+                    do {
+                        let enhanced = try await cloudAnalyzer.enhance(analysis, text: text)
+                        return (index, enhanced, true)
+                    } catch {
+                        return (index, analysis, false)
                     }
                 }
-                var collected: [(Int, FileAnalysis, Bool)] = []
-                for await item in group {
-                    collected.append(item)
-                }
-                return collected
             }
-            for batchResult in batchResults {
-                result[batchResult.index] = batchResult.analysis
-                if !batchResult.succeeded {
+
+            while running < maxConcurrentCloud, nextIndex < total { launchNext() }
+
+            for try await (index, analysis, succeeded) in group {
+                try Task.checkCancellation()
+                running -= 1
+                result[index] = analysis
+                if !succeeded {
                     failureCount += 1
                 }
                 completed += 1
                 onProgress(.enhancing(completed: completed, total: total))
+                launchNext()
             }
-            index = batchEnd
         }
 
         return (result, failureCount)
