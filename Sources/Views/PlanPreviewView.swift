@@ -30,6 +30,7 @@ struct PlanPreviewView: View {
                 List {
                     if !plan.duplicateGroups.isEmpty {
                         Section("重复文件组") {
+                            duplicateGroupStrategyMenu
                             duplicateGroupsSection
                         }
                     }
@@ -69,6 +70,53 @@ struct PlanPreviewView: View {
             get: { viewModel.plan?.operations ?? [] },
             set: { viewModel.plan?.operations = $0 }
         )
+    }
+
+    @ViewBuilder
+    private var duplicateGroupStrategyMenu: some View {
+        HStack {
+            Text("保留策略")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Menu("应用策略") {
+                Button("每组保留第一个") { applyKeepStrategy(.first) }
+                Button("每组保留最新") { applyKeepStrategy(.newest) }
+                Button("全部保留") { applyKeepStrategy(.all) }
+            }
+        }
+    }
+
+    private enum KeepStrategy {
+        case first, newest, all
+    }
+
+    private func applyKeepStrategy(_ strategy: KeepStrategy) {
+        guard var groups = viewModel.plan?.duplicateGroups else { return }
+        switch strategy {
+        case .first:
+            for i in groups.indices {
+                groups[i].keepIndex = 0
+            }
+        case .newest:
+            for i in groups.indices {
+                groups[i].keepIndex = newestIndex(in: groups[i])
+            }
+        case .all:
+            for i in groups.indices {
+                groups[i].keepIndex = nil
+            }
+        }
+        viewModel.plan?.duplicateGroups = groups
+        Task {
+            await viewModel.rebuildPlan()
+        }
+    }
+
+    private func newestIndex(in group: DuplicateGroup) -> Int? {
+        let dates = group.items.map { $0.modificationDate ?? Date.distantPast }
+        guard let maxDate = dates.max() else { return nil }
+        return dates.firstIndex { $0 == maxDate }
     }
 
     @ViewBuilder
