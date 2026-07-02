@@ -5,8 +5,6 @@ import SwiftUI
 @Observable
 final class TaskListViewModel {
     var tasks: [OrganizationTask] = []
-    /// 使用 `SettingsViewModel` 中集中定义的默认模板，保持一致性。
-    var templates: [NamingTemplate] = SettingsViewModel.defaultTemplates
 
     private var storageURL: URL {
         guard let supportURL = FileManager.default

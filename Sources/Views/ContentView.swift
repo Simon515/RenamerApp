@@ -67,17 +67,7 @@ struct ContentView: View {
             guard let urls = notification.object as? [URL] else { return }
             analyze(folders: urls)
         }
-        .alert("提示", isPresented: Binding(
-            get: { viewModel.errorMessage != nil || viewModel.successMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil; viewModel.successMessage = nil } }
-        )) {
-            Button("确定") {
-                viewModel.errorMessage = nil
-                viewModel.successMessage = nil
-            }
-        } message: {
-            Text(viewModel.errorMessage ?? viewModel.successMessage ?? "")
-        }
+        .userMessageAlert($viewModel.userMessage)
     }
 
     /// 分析所选文件夹，复用主窗口默认模板与目标目录。

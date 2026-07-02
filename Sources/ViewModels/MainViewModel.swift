@@ -6,8 +6,7 @@ import SwiftUI
 final class MainViewModel {
     var plan: OrganizationPlan?
     var isAnalyzing = false
-    var errorMessage: String?
-    var successMessage: String?
+    var userMessage: UserMessage?
     var settings: SettingsViewModel?
 
     private let pipeline = AnalysisPipeline()
@@ -50,12 +49,12 @@ final class MainViewModel {
                 messages.append("云端增强失败 \(outcome.cloudFailureCount) 个文件")
             }
             if !messages.isEmpty {
-                errorMessage = messages.joined(separator: "\n")
+                userMessage = .error(messages.joined(separator: "\n"))
             }
         } catch is CancellationError {
             // 用户取消：静默返回，不视为错误。
         } catch {
-            errorMessage = error.localizedDescription
+            userMessage = .error(error.localizedDescription)
         }
     }
 
@@ -84,7 +83,7 @@ final class MainViewModel {
             }
             self.plan = newPlan
         } catch {
-            errorMessage = error.localizedDescription
+            userMessage = .error(error.localizedDescription)
         }
     }
 
@@ -97,17 +96,17 @@ final class MainViewModel {
             do {
                 try await RollbackService().save(record: result.record)
                 self.plan = nil
-                successMessage = "整理完成，已处理 \(result.record.moves.count) 个文件（启用 \(enabledCount) 项）\(skippedSuffix)"
+                userMessage = .success("整理完成，已处理 \(result.record.moves.count) 个文件（启用 \(enabledCount) 项）\(skippedSuffix)")
             } catch {
                 // 整理已成功，但回滚记录保存失败；保留计划以便用户知晓并自行处理。
-                errorMessage = "整理已完成，但回滚记录保存失败：\(error.localizedDescription)"
+                userMessage = .error("整理已完成，但回滚记录保存失败：\(error.localizedDescription)")
             }
         } catch let error as OrganizerError {
             // 整理中途真失败：保存已完成操作的记录以便部分回滚，并报错。
             try? await RollbackService().save(record: error.partialRecord)
-            errorMessage = error.localizedDescription
+            userMessage = .error(error.localizedDescription)
         } catch {
-            errorMessage = error.localizedDescription
+            userMessage = .error(error.localizedDescription)
         }
     }
 }

@@ -22,26 +22,23 @@ struct CloudAnalyzer {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let body: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": "You are a file organization assistant. Respond only with JSON containing keys: title, date (ISO8601 or empty), category, tags (array), source, summary, confidence (0-1)."],
-                ["role": "user", "content": String(text.prefix(4000))]
+        let payload = ChatRequest(
+            model: model,
+            messages: [
+                ChatMessage(role: "system", content: "You are a file organization assistant. Respond only with JSON containing keys: title, date (ISO8601 or empty), category, tags (array), source, summary, confidence (0-1)."),
+                ChatMessage(role: "user", content: String(text.prefix(4000)))
             ],
-            "temperature": 0.2
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            temperature: 0.2
+        )
+        request.httpBody = try JSONEncoder().encode(payload)
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             throw AnalysisError.cloudHTTPStatus(status)
         }
-        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = obj["choices"] as? [[String: Any]],
-              let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+        guard let decoded = try? JSONDecoder().decode(ChatResponse.self, from: data),
+              let content = decoded.choices.first?.message.content else {
             throw AnalysisError.cloudDecodingFailed
         }
         return apply(json: content, to: analysis)
@@ -50,20 +47,20 @@ struct CloudAnalyzer {
     func apply(json: String, to analysis: FileAnalysis) -> FileAnalysis {
         let cleaned = cleanJSONContent(json)
         guard let data = cleaned.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+              let fields = try? JSONDecoder().decode(CloudFields.self, from: data) else {
             return analysis
         }
         var copy = analysis
-        copy.title = obj["title"] as? String ?? copy.title
-        copy.category = obj["category"] as? String ?? copy.category
-        copy.source = obj["source"] as? String ?? copy.source
-        copy.summary = obj["summary"] as? String ?? copy.summary
-        if let dateString = obj["date"] as? String, !dateString.isEmpty,
+        if let title = fields.title { copy.title = title }
+        if let category = fields.category { copy.category = category }
+        if let source = fields.source { copy.source = source }
+        if let summary = fields.summary { copy.summary = summary }
+        if let dateString = fields.date, !dateString.isEmpty,
            let parsed = ISO8601DateFormatter().date(from: dateString) {
             copy.date = parsed
         }
-        if let tags = obj["tags"] as? [String] { copy.tags = tags }
-        if let conf = obj["confidence"] as? Double { copy.confidence = conf }
+        if let tags = fields.tags { copy.tags = tags }
+        if let confidence = fields.confidence { copy.confidence = confidence }
         return copy
     }
 
@@ -84,4 +81,35 @@ struct CloudAnalyzer {
         }
         return cleaned
     }
+}
+
+// MARK: - OpenAI 兼容 Chat Completions 的请求/响应模型
+
+private struct ChatRequest: Encodable {
+    let model: String
+    let messages: [ChatMessage]
+    let temperature: Double
+}
+
+private struct ChatMessage: Codable {
+    let role: String
+    let content: String
+}
+
+private struct ChatResponse: Decodable {
+    struct Choice: Decodable {
+        let message: ChatMessage
+    }
+    let choices: [Choice]
+}
+
+/// 大模型返回的结构化标签，所有字段可选以容忍缺省。
+private struct CloudFields: Decodable {
+    let title: String?
+    let date: String?
+    let category: String?
+    let tags: [String]?
+    let source: String?
+    let summary: String?
+    let confidence: Double?
 }
