@@ -90,6 +90,18 @@ struct ContentView: View {
             guard let urls = notification.object as? [URL] else { return }
             analyze(folders: urls)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .renamerRunTask)) { notification in
+            guard let taskID = notification.object as? UUID,
+                  let task = taskList.tasks.first(where: { $0.id == taskID }),
+                  let template = settings.templates.first(where: { $0.id == task.templateID }) else { return }
+            viewModel.analyze(
+                folders: task.sourceFolders,
+                task: task,
+                template: template,
+                destination: task.destinationFolder,
+                operation: task.operation
+            )
+        }
         .userMessageAlert($viewModel.userMessage)
     }
 
