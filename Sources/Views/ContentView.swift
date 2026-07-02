@@ -32,6 +32,11 @@ struct ContentView: View {
                         DropZoneView { urls in analyze(folders: urls) }
                     }
 
+                Text("目标目录：\(settings.quickDestination.path())")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
                 Picker("整理方式", selection: $operation) {
                     Text("复制").tag(CopyOrMove.copy)
                     Text("移动").tag(CopyOrMove.move)
@@ -92,7 +97,7 @@ struct ContentView: View {
     private func analyze(folders: [URL]) {
         guard !folders.isEmpty else { return }
         let template = settings.defaultTemplate
-        let destination = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer")
+        let destination = settings.quickDestination
         viewModel.analyze(folders: folders, task: nil, template: template, destination: destination, operation: operation)
     }
 

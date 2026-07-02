@@ -7,6 +7,7 @@ final class SettingsViewModel {
     var templates: [NamingTemplate] = SettingsViewModel.defaultTemplates
     var defaultTemplateID: UUID? = SettingsViewModel.defaultTemplates.first?.id
     var defaultOperation: CopyOrMove = .copy
+    var quickDestination: URL = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer")
     var cloudBaseURL: String = ""
     var cloudAPIKey: String = ""
     var cloudModel: String = ""
@@ -80,6 +81,7 @@ final class SettingsViewModel {
                 templates: templates,
                 defaultTemplateID: defaultTemplateID,
                 defaultOperation: defaultOperation,
+                quickDestination: quickDestination,
                 cloudBaseURL: cloudBaseURL,
                 cloudModel: cloudModel
             )
@@ -106,6 +108,7 @@ final class SettingsViewModel {
             templates = (payload.templates?.isEmpty ?? true) ? SettingsViewModel.defaultTemplates : payload.templates!
             defaultTemplateID = payload.defaultTemplateID ?? templates.first?.id
             defaultOperation = payload.defaultOperation ?? .copy
+            quickDestination = payload.quickDestination ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer")
             payloadCloudBaseURL = payload.cloudBaseURL ?? ""
             payloadCloudModel = payload.cloudModel ?? ""
             legacyPlaintextKey = payload.cloudAPIKey
@@ -143,6 +146,7 @@ private struct SettingsPayload: Codable {
     var templates: [NamingTemplate]
     var defaultTemplateID: UUID?
     var defaultOperation: CopyOrMove
+    var quickDestination: URL
     var cloudBaseURL: String
     var cloudModel: String
 }
@@ -152,6 +156,7 @@ private struct LegacySettingsPayload: Decodable {
     var templates: [NamingTemplate]?
     var defaultTemplateID: UUID?
     var defaultOperation: CopyOrMove?
+    var quickDestination: URL?
     var cloudBaseURL: String?
     var cloudAPIKey: String?
     var cloudModel: String?

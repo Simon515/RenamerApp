@@ -45,8 +45,32 @@ struct SettingsView: View {
             .onChange(of: settings.defaultOperation) { _, _ in
                 settings.save()
             }
+
+            Section("拖拽整理目标目录") {
+                HStack {
+                    Text(settings.quickDestination.path())
+                        .font(.caption)
+                        .lineLimit(1)
+                    Spacer()
+                    Button("更改…") { pickQuickDestination() }
+                }
+                Text("拖拽到主窗口的文件将被整理到此目录。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding()
+    }
+
+    private func pickQuickDestination() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.quickDestination = url
+            settings.save()
+        }
     }
 
     @ViewBuilder
