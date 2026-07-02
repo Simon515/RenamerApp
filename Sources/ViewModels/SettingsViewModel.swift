@@ -14,6 +14,9 @@ final class SettingsViewModel {
     /// Keychain 相关操作的错误提示（如写入失败），供 UI 展示。
     var keychainError: String?
 
+    var devonthinkDatabase: String = ""
+    var devonthinkGroup: String = ""
+
     private static let keychain = KeychainStore(service: "com.renamer.credentials")
     private static let apiKeyAccount = "cloud-api-key"
 
@@ -83,7 +86,9 @@ final class SettingsViewModel {
                 defaultOperation: defaultOperation,
                 quickDestination: quickDestination,
                 cloudBaseURL: cloudBaseURL,
-                cloudModel: cloudModel
+                cloudModel: cloudModel,
+                devonthinkDatabase: devonthinkDatabase,
+                devonthinkGroup: devonthinkGroup
             )
             let data = try JSONEncoder().encode(payload)
             let url = Self.settingsURL
@@ -111,6 +116,8 @@ final class SettingsViewModel {
             quickDestination = payload.quickDestination ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: "Documents/Renamer")
             payloadCloudBaseURL = payload.cloudBaseURL ?? ""
             payloadCloudModel = payload.cloudModel ?? ""
+            devonthinkDatabase = payload.devonthinkDatabase ?? ""
+            devonthinkGroup = payload.devonthinkGroup ?? ""
             legacyPlaintextKey = payload.cloudAPIKey
         } catch {
             // 无历史设置或解析失败时使用默认值。
@@ -149,6 +156,8 @@ private struct SettingsPayload: Codable {
     var quickDestination: URL
     var cloudBaseURL: String
     var cloudModel: String
+    var devonthinkDatabase: String
+    var devonthinkGroup: String
 }
 
 /// 兼容旧版格式的解码用 payload：全部字段可选，用于读取可能存在的遗留明文 `cloudAPIKey`。
@@ -160,4 +169,6 @@ private struct LegacySettingsPayload: Decodable {
     var cloudBaseURL: String?
     var cloudAPIKey: String?
     var cloudModel: String?
+    var devonthinkDatabase: String?
+    var devonthinkGroup: String?
 }

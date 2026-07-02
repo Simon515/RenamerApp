@@ -75,6 +75,11 @@ struct TaskEditorView: View {
         .onAppear {
             operation = settings.defaultOperation
             selectedTemplateID = settings.defaultTemplateID ?? settings.templates.first?.id
+            if settings.devonthinkDatabase.isEmpty == false || settings.devonthinkGroup.isEmpty == false {
+                useDEVONthink = true
+                devonthinkDatabase = settings.devonthinkDatabase
+                devonthinkGroup = settings.devonthinkGroup
+            }
         }
         .alert("保存失败", isPresented: $showError) {
             Button("确定") { showError = false }

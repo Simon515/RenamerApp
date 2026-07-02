@@ -14,8 +14,10 @@ struct SettingsView: View {
                 .tabItem { Label("模板", systemImage: "text.quote") }
             aiTab
                 .tabItem { Label("AI", systemImage: "cpu") }
+            devonthinkTab
+                .tabItem { Label("导出", systemImage: "square.and.arrow.up") }
         }
-        .frame(width: 520, height: 400)
+        .frame(width: 520, height: 420)
         .sheet(isPresented: $showTemplateEditor) {
             if let editingTemplate {
                 TemplateEditorSheet(template: editingTemplate) { updated in
@@ -176,6 +178,24 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+        }
+        .padding()
+    }
+
+    @ViewBuilder
+    private var devonthinkTab: some View {
+        @Bindable var settings = settings
+        Form {
+            TextField("默认数据库", text: $settings.devonthinkDatabase)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { settings.save() }
+            TextField("默认组路径", text: $settings.devonthinkGroup)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { settings.save() }
+
+            Text("新建任务启用 DEVONthink 导出时会预填以上默认值。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding()
     }
