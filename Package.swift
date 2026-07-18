@@ -11,6 +11,8 @@ let package = Package(
         .executableTarget(
             name: "Renamer",
             path: "Sources",
+            // 排除新增的 Sage 目录，避免与 Sage 目标源码路径重叠；Renamer 实际编译内容不变
+            exclude: ["Sage"],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency")
             ]
@@ -19,6 +21,16 @@ let package = Package(
             name: "RenamerTests",
             dependencies: ["Renamer"],
             path: "Tests/RenamerTests"
+        ),
+        .executableTarget(
+            name: "Sage",
+            path: "Sources/Sage",
+            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
+        ),
+        .testTarget(
+            name: "SageTests",
+            dependencies: ["Sage"],
+            path: "Tests/SageTests"
         )
     ]
 )
