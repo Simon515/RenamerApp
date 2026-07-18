@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 /// 单条件求值器：只向 Provider 索取该条件档次所需的数据。
 public struct ConditionEvaluator: Sendable {
@@ -26,7 +27,7 @@ public struct ConditionEvaluator: Sendable {
         case .modifiedWithinDays(let days):
             return withinDays(try await provider.cheapFacts(for: location).modifiedAt, days: days)
         case .utTypeConforms(let identifier):
-            return try await provider.cheapFacts(for: location).utType == identifier
+            return utTypeConforms(try await provider.cheapFacts(for: location).utType, to: identifier)
         case .textContent(let match):
             guard let text = try await provider.extractedFacts(for: location).text else { return false }
             return match.matches(text)
@@ -47,8 +48,21 @@ public struct ConditionEvaluator: Sendable {
     }
 
     /// 日期缺失视为不匹配（保守策略：宁可不触发规则）。
+    /// 负间隔（文件日期在未来）或 days<0 均视为不匹配。
     private func withinDays(_ date: Date?, days: Int) -> Bool {
-        guard let date else { return false }
-        return now().timeIntervalSince(date) <= Double(days) * 86400
+        guard let date, days >= 0 else { return false }
+        let interval = now().timeIntervalSince(date)
+        guard interval >= 0 else { return false }  // 未来日期不匹配
+        return interval <= Double(days) * 86400
+    }
+
+    /// UTType 一致性判断：`public.jpeg` 应符合 `public.image`。
+    /// utType 缺失不匹配；任一标识符无法构造 UTType 时回退到字符串等值以免误判。
+    private func utTypeConforms(_ utType: String?, to identifier: String) -> Bool {
+        guard let utType else { return false }
+        guard let fileType = UTType(utType), let target = UTType(identifier) else {
+            return utType == identifier
+        }
+        return fileType.conforms(to: target)
     }
 }

@@ -64,6 +64,45 @@ final class ConditionEvaluatorTests: XCTestCase {
         XCTAssertTrue(ok)
     }
 
+    func testUTTypeConforms_一致性判断() async throws {
+        let provider = FakeFactsProvider(
+            cheap: CheapFacts(name: "f", fileExtension: "jpg", sizeBytes: 1, utType: "public.jpeg"))
+        let eval = ConditionEvaluator(provider: provider)
+        let isImage = try await eval.evaluate(.utTypeConforms("public.image"), at: loc)
+        let isMovie = try await eval.evaluate(.utTypeConforms("public.movie"), at: loc)
+        let exact = try await eval.evaluate(.utTypeConforms("public.jpeg"), at: loc)
+        XCTAssertTrue(isImage, "public.jpeg 应符合 public.image")
+        XCTAssertFalse(isMovie, "public.jpeg 不应符合 public.movie")
+        XCTAssertTrue(exact)
+    }
+
+    func testUTTypeConforms_无utType不匹配() async throws {
+        let provider = FakeFactsProvider(
+            cheap: CheapFacts(name: "f", fileExtension: "jpg", sizeBytes: 1, utType: nil))
+        let eval = ConditionEvaluator(provider: provider)
+        let result = try await eval.evaluate(.utTypeConforms("public.image"), at: loc)
+        XCTAssertFalse(result)
+    }
+
+    func testWithinDays_未来日期不匹配() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let future = now.addingTimeInterval(2 * 86400)
+        let provider = FakeFactsProvider(
+            cheap: CheapFacts(name: "f", fileExtension: "pdf", sizeBytes: 1, createdAt: future))
+        let eval = ConditionEvaluator(provider: provider, now: { now })
+        let result = try await eval.evaluate(.createdWithinDays(7), at: loc)
+        XCTAssertFalse(result, "文件日期在未来应视为不匹配")
+    }
+
+    func testWithinDays_负天数不匹配() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let provider = FakeFactsProvider(
+            cheap: CheapFacts(name: "f", fileExtension: "pdf", sizeBytes: 1, createdAt: now))
+        let eval = ConditionEvaluator(provider: provider, now: { now })
+        let result = try await eval.evaluate(.createdWithinDays(-1), at: loc)
+        XCTAssertFalse(result)
+    }
+
     func testFree条件不触发提取与LLM() async throws {
         let provider = FakeFactsProvider()
         let eval = ConditionEvaluator(provider: provider)
