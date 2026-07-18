@@ -55,14 +55,13 @@ public struct LocalExtractor: Sendable {
             return ExtractedFacts()
         }
         let url = URL(fileURLWithPath: path)
-        let data: Data
+        let hash: String
         do {
-            data = try Data(contentsOf: url)
+            hash = try sha256HexStreaming(url: url)
         } catch {
             throw ExtractionError.fileRead(error)
         }
-        let hash = sha256Hex(data)
-        let text = extractText(url: url, data: data)
+        let text = extractText(url: url)
         let captureDate = extractCaptureDate(url: url)
         let sourceURL = spotlightSourceURL(url: url)
         return ExtractedFacts(
@@ -76,7 +75,7 @@ public struct LocalExtractor: Sendable {
 
     // MARK: - 文本提取
 
-    private func extractText(url: URL, data: Data) -> String? {
+    private func extractText(url: URL) -> String? {
         let ext = url.pathExtension.lowercased()
         switch ext {
         case "pdf":
@@ -84,7 +83,8 @@ public struct LocalExtractor: Sendable {
         case "rtf", "rtfd":
             return extractRTFText(url: url)
         default:
-            if let s = String(data: data, encoding: .utf8), !s.isEmpty { return s }
+            if let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+               let s = String(data: data, encoding: .utf8), !s.isEmpty { return s }
             return spotlightText(url: url)
         }
     }
@@ -163,9 +163,13 @@ public struct LocalExtractor: Sendable {
         } catch {
             return ""
         }
-        let deadline = Date().addingTimeInterval(5)
-        while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
-        if process.isRunning { process.terminate() }
+        // 5 秒超时兜底：定时器到点 terminate，正常则 waitUntilExit 阻塞等待（不忙等）。
+        let timeout = DispatchWorkItem { [process] in
+            if process.isRunning { process.terminate() }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeout)
+        process.waitUntilExit()
+        timeout.cancel()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -173,8 +177,17 @@ public struct LocalExtractor: Sendable {
 
     // MARK: - 哈希
 
-    private func sha256Hex(_ data: Data) -> String {
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
+    /// 流式分块读取算 SHA-256，避免整文件入内存。
+    private func sha256HexStreaming(url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        let chunkSize = 1 << 20  // 1 MiB
+        while true {
+            let chunk = try handle.read(upToCount: chunkSize) ?? Data()
+            if chunk.isEmpty { break }
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }
