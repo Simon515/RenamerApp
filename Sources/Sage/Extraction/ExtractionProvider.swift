@@ -27,14 +27,16 @@ public actor ExtractionProvider: FactsProvider {
     private let gateway: LLMGateway
     private let duplicateRegistry: DuplicateRegistry
 
-    private var extractedCache: [String: ExtractedFacts] = [:]  // key = path 或 contentHash
+    private var extractedCache: BoundedCache<String, ExtractedFacts>  // key = path 或 contentHash
 
     public init(extractor: LocalExtractor = LocalExtractor(),
                 gateway: LLMGateway,
-                duplicateRegistry: DuplicateRegistry = .shared) {
+                duplicateRegistry: DuplicateRegistry = .shared,
+                cacheCapacity: Int = 500) {
         self.extractor = extractor
         self.gateway = gateway
         self.duplicateRegistry = duplicateRegistry
+        self.extractedCache = BoundedCache(capacity: cacheCapacity)
     }
 
     public func cheapFacts(for location: FileLocation) async throws -> CheapFacts {
