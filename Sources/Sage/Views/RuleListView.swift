@@ -2,8 +2,7 @@ import SwiftUI
 
 struct RuleListView: View {
     @Bindable var app: AppModel
-    @State private var editing: Rule?
-    @State private var showingEditor = false
+    @State private var editorModel: RuleEditorModel?
 
     var body: some View {
         List {
@@ -25,7 +24,7 @@ struct RuleListView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
-                .onTapGesture { editing = rule; showingEditor = true }
+                .onTapGesture { editorModel = RuleEditorModel(rule: rule, engine: app.dryRunEngine) }
                 .contextMenu {
                     Button("复制") { Task { await app.ruleList.duplicate(ruleID: rule.id) } }
                     Button("导出 JSON") {
@@ -44,21 +43,13 @@ struct RuleListView: View {
         .toolbar {
             ToolbarItem {
                 Button {
-                    editing = newRuleTemplate(); showingEditor = true
+                    editorModel = RuleEditorModel(rule: newRuleTemplate(), engine: app.dryRunEngine)
                 } label: { Label("新建规则", systemImage: "plus") }
             }
         }
-        .sheet(isPresented: $showingEditor) {
-            if let rule = editing {
-                RuleEditorView(model: RuleEditorModel(rule: rule, engine: app.dryRunEngine)) { saved in
-                    Task {
-                        if app.ruleList.rules.contains(where: { $0.id == saved.id }) {
-                            await app.ruleList.update(saved)
-                        } else {
-                            await app.ruleList.add(saved)
-                        }
-                    }
-                }
+        .sheet(item: $editorModel) { model in
+            RuleEditorView(model: model) { saved in
+                Task { await app.ruleList.upsert(saved) }
             }
         }
     }

@@ -29,7 +29,7 @@ struct ContentView: View {
         } detail: {
             switch selection ?? .rules {
             case .rules: RuleListView(app: app)
-            case .queue: ConfirmQueueView(model: app.confirmQueue)
+            case .queue: ConfirmQueueView(model: app.confirmQueue) { await app.refreshQueueBadge() }
             case .journal: JournalView(model: app.journal)
             }
         }

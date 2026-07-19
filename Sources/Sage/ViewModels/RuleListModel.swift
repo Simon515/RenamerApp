@@ -57,6 +57,13 @@ public final class RuleListModel {
         await save()
     }
 
+    /// 存在则覆盖、不存在则追加（编辑器保存统一入口，避免调用方分辨新增/修改）。
+    public func upsert(_ rule: Rule) async {
+        if let idx = rules.firstIndex(where: { $0.id == rule.id }) { rules[idx] = rule }
+        else { rules.append(rule) }
+        await save()
+    }
+
     /// 当前规则快照，供监控总管重建 watcher 用；从未加载过则先加载。
     public func currentRulesSnapshot() async -> [Rule] {
         if rules.isEmpty { await reload() }

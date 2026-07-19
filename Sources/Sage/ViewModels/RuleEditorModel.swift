@@ -14,7 +14,8 @@ public struct DryRunResult: Sendable, Equatable {
 /// 规则编辑器视图模型：编辑草稿 + 试运行预览。
 @MainActor
 @Observable
-public final class RuleEditorModel {
+public final class RuleEditorModel: Identifiable {
+    public let id = UUID()
     public var draft: Rule
     public var dryRun: DryRunResult?
     public var errorMessage: String?
