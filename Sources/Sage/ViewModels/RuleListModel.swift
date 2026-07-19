@@ -57,6 +57,12 @@ public final class RuleListModel {
         await save()
     }
 
+    /// 当前规则快照，供监控总管重建 watcher 用；从未加载过则先加载。
+    public func currentRulesSnapshot() async -> [Rule] {
+        if rules.isEmpty { await reload() }
+        return rules
+    }
+
     public func exportJSON(ruleID: UUID) -> String? {
         guard let rule = rules.first(where: { $0.id == ruleID }) else { return nil }
         let encoder = JSONEncoder()

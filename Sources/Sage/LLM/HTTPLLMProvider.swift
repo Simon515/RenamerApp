@@ -16,7 +16,7 @@ public struct HTTPLLMConfig: Sendable, Equatable {
 }
 
 /// OpenAI 兼容协议的 HTTP 实现：云端（DeepSeek/Kimi/OpenRouter/SiliconFlow）与本地（Ollama/LM Studio）同一接口。
-public struct HTTPLLMProvider: Sendable {
+public struct HTTPLLMProvider: LLMProvider {
     private let config: HTTPLLMConfig
     private let session: URLSession
 
