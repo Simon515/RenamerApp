@@ -23,6 +23,9 @@ public final class AppModel {
     public let confirmQueue: ConfirmQueueModel
     public let journal: JournalModel
 
+    /// 规则编辑器试运行用的引擎：复用同一 gateway 的真实提取/LLM 求值。
+    public let dryRunEngine: RuleEngine
+
     private let coordinator: Coordinator
     private let manualIntake: ManualIntake
     private let queue: ConfirmQueue
@@ -47,6 +50,7 @@ public final class AppModel {
         self.confirmQueue = ConfirmQueueModel(queue: queue, coordinator: coordinator)
         self.journal = JournalModel(journal: journalActor)
         self.supervisor = WatcherSupervisor(coordinator: coordinator)
+        self.dryRunEngine = RuleEngine(provider: ExtractionProvider(gateway: gateway))
     }
 
     public static func bootstrap(supportDirectory: URL) async -> AppModel {
