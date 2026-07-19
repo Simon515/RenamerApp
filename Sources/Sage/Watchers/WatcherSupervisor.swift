@@ -63,6 +63,9 @@ public actor WatcherSupervisor {
                                     onAvailabilityChange: handler)
             await watcher.start()
             dtWatcher = watcher
+        } else {
+            // 无 DT 监控组 → 不存在"相关规则已暂停"，提示须复位
+            await dtAvailabilityHandler?(true)
         }
     }
 
@@ -71,6 +74,7 @@ public actor WatcherSupervisor {
         watchers.removeAll()
         await dtWatcher?.stop()
         dtWatcher = nil
+        await dtAvailabilityHandler?(true)
     }
 
     public func restart(rules: [Rule]) async {
