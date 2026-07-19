@@ -7,6 +7,11 @@ public enum ReversibleOp: Codable, Sendable, Equatable {
     case renamed(from: String, to: String)
     case trashed(originalPath: String, trashPath: String?)
     case addedFinderTags([String], to: String, previous: [String])
+    // DEVONthink 侧可逆操作（第 5 份计划）
+    case dtImported(uuid: String, database: String)
+    case dtRenamed(uuid: String, from: String, to: String)
+    case dtAddedTags([String], uuid: String, previous: [String])
+    case dtMoved(uuid: String, fromDatabase: String, fromGroup: String, toDatabase: String, toGroup: String)
 }
 
 /// 一次成功执行的操作记录（用于日志展示与回滚）。
