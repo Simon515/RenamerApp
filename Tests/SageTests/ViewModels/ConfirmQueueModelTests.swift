@@ -57,6 +57,18 @@ final class ConfirmQueueModelTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: src)) // 未删
     }
 
+    func test批准失败保留错误消息() async throws {
+        let src = try makeFile("d.pdf")
+        let (model, coordinator, _) = try await makeStack()
+        _ = await coordinator.handle(FileEvent(location: .local(path: src), source: .manual))
+        await model.reload()
+        // 入队后删掉底层文件，使批准执行失败
+        try FileManager.default.removeItem(atPath: src)
+        await model.approve(id: model.items[0].id)
+        // 失败信息不应被随后的 reload 抹掉
+        XCTAssertNotNil(model.errorMessage)
+    }
+
     func test摘要非空() async throws {
         let src = try makeFile("c.pdf")
         let (model, coordinator, _) = try await makeStack()

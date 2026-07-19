@@ -15,31 +15,42 @@ public final class ConfirmQueueModel {
         self.queue = queue; self.coordinator = coordinator
     }
 
+    /// 视图主动刷新：清掉旧错误后重载列表。
     public func reload() async {
-        do { items = try await queue.all(); errorMessage = nil }
+        errorMessage = nil
+        await loadItems()
+    }
+
+    /// 仅重载列表，不清空 errorMessage —— 供操作路径在设置错误后刷新，避免把刚设的错误抹掉。
+    private func loadItems() async {
+        do { items = try await queue.all() }
         catch { errorMessage = error.localizedDescription }
     }
 
     public func approve(id: UUID) async {
+        errorMessage = nil
         let outcome = await coordinator.approve(pendingID: id)
         if case .failed(_, _, let message) = outcome { errorMessage = message }
-        await reload()
+        await loadItems()
     }
 
     public func reject(id: UUID) async {
-        do { try await coordinator.reject(pendingID: id); errorMessage = nil }
+        errorMessage = nil
+        do { try await coordinator.reject(pendingID: id) }
         catch { errorMessage = error.localizedDescription }
-        await reload()
+        await loadItems()
     }
 
     public func approveAll() async {
+        errorMessage = nil
         for item in items { _ = await coordinator.approve(pendingID: item.id) }
-        await reload()
+        await loadItems()
     }
 
     public func rejectAll() async {
+        errorMessage = nil
         for item in items { try? await coordinator.reject(pendingID: item.id) }
-        await reload()
+        await loadItems()
     }
 
     /// 「源 → 动作序列」一行摘要。
