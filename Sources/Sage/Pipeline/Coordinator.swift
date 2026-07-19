@@ -81,6 +81,15 @@ public actor Coordinator {
                                        sourceDescription: describe(planned.location), ops: ops)
             try await journal.append(record)
             return .executed(record)
+        } catch let error as PartialActionFailure {
+            // 中途失败：已完成的操作必须记入 Journal，否则用户无法查看或回滚。
+            let record = JournalRecord(id: UUID(), timestamp: now(), ruleID: planned.ruleID,
+                                       ruleName: planned.ruleName,
+                                       sourceDescription: describe(planned.location),
+                                       ops: error.completedOps)
+            try? await journal.append(record)
+            return .failed(location: planned.location, ruleName: planned.ruleName,
+                           message: error.underlying.localizedDescription)
         } catch {
             return .failed(location: planned.location, ruleName: planned.ruleName,
                            message: error.localizedDescription)

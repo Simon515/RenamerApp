@@ -63,6 +63,24 @@ final class LocalActionExecutorTests: XCTestCase {
         }
     }
 
+    func test中途失败_携带已完成操作() async throws {
+        let src = try makeFile("a.pdf")
+        let outDir = dir.appendingPathComponent("out")
+        try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        let missingDir = dir.appendingPathComponent("nope") // 不创建，copy 会失败
+        let exec = LocalActionExecutor(metadataProvider: FakeMetadataProvider(result: .init()))
+        do {
+            _ = try await exec.run(actions: [.moveTo(path: outDir.path), .copyTo(path: missingDir.path)],
+                                   on: .local(path: src))
+            XCTFail("应抛 PartialActionFailure")
+        } catch let e as PartialActionFailure {
+            let movedDest = outDir.appendingPathComponent("a.pdf").path
+            XCTAssertTrue(e.completedOps.contains(.moved(from: src, to: movedDest)))
+        } catch {
+            XCTFail("应抛 PartialActionFailure，实际：\(error)")
+        }
+    }
+
     func test废纸篓仅runIncludingTrash允许() async throws {
         let src = try makeFile("del.txt")
         let exec = LocalActionExecutor(metadataProvider: FakeMetadataProvider(result: .init()))

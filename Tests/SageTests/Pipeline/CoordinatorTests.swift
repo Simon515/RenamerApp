@@ -52,6 +52,24 @@ final class CoordinatorTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
+    func test自动规则_中途失败仍写部分执行日志() async throws {
+        let src = try makeFile("a.pdf")
+        let outDir = dir.appendingPathComponent("out")
+        try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        let missingDir = dir.appendingPathComponent("nope") // 不创建，copy 会失败
+        let coord = makeCoordinator(rules: [
+            rule(name: "移动后复制", conditions: [.fileExtension(.equals("pdf"))],
+                 actions: [.moveTo(path: outDir.path), .copyTo(path: missingDir.path)], mode: .automatic)])
+        let outcomes = await coord.handle(FileEvent(location: .local(path: src), source: .folderWatch(root: dir.path)))
+        if case .failed = outcomes.first {} else { XCTFail("应 failed") }
+        // 部分执行（move）必须记入日志以便回滚
+        let journal = Journal(directory: dir)
+        let records = try await journal.all()
+        XCTAssertEqual(records.count, 1)
+        let movedDest = outDir.appendingPathComponent("a.pdf").path
+        XCTAssertTrue(records.first!.ops.contains(.moved(from: src, to: movedDest)))
+    }
+
     func test确认模式_入队不执行() async throws {
         let src = try makeFile("a.pdf")
         let coord = makeCoordinator(rules: [

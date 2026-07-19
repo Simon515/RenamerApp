@@ -26,6 +26,16 @@ public enum ActionExecutionError: LocalizedError {
     }
 }
 
+/// 动作序列中途失败：携带已成功完成的可逆操作，供上层记入 Journal 以便回滚。
+public struct PartialActionFailure: Error, Sendable {
+    public let completedOps: [ReversibleOp]
+    public let underlying: any Error
+    public init(completedOps: [ReversibleOp], underlying: any Error) {
+        self.completedOps = completedOps
+        self.underlying = underlying
+    }
+}
+
 /// DEVONthink 动作在本计划未实现，一律抛错（第 5 份计划替换）。
 public struct UnimplementedDTActionExecutor: DTActionExecutor {
     public init() {}

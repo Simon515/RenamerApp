@@ -32,43 +32,50 @@ public actor LocalActionExecutor {
         var metadata = ExtractedMetadata()
 
         for action in actions {
-            switch action {
-            case .continueMatching:
-                continue
-            case .llmExtractMetadata:
-                metadata = try await metadataProvider.metadata(for: .local(path: currentPath))
-            case .moveTo(let destDir):
-                let name = (currentPath as NSString).lastPathComponent
-                let dest = dedupInDir(destDir, name: name)
-                try move(from: currentPath, to: dest)
-                ops.append(.moved(from: currentPath, to: dest))
-                currentPath = dest
-            case .copyTo(let destDir):
-                let name = (currentPath as NSString).lastPathComponent
-                let dest = dedupInDir(destDir, name: name)
-                try fileManager.copyItem(atPath: currentPath, toPath: dest)
-                ops.append(.copied(to: dest))
-            case .rename(let template):
-                let dest = pathResolver.resolveRename(inDirectoryOf: currentPath, template: template, metadata: metadata)
-                try move(from: currentPath, to: dest)
-                ops.append(.renamed(from: currentPath, to: dest))
-                currentPath = dest
-            case .llmRename(let instruction):
-                let dest = pathResolver.resolveRename(inDirectoryOf: currentPath, template: instruction, metadata: metadata)
-                try move(from: currentPath, to: dest)
-                ops.append(.renamed(from: currentPath, to: dest))
-                currentPath = dest
-            case .addFinderTags(let tags):
-                let op = try addFinderTags(tags, to: currentPath)
-                ops.append(op)
-            case .moveToTrash:
-                guard allowTrash else { throw ActionExecutionError.unsupportedAction("移到废纸篓（需经确认队列）") }
-                let op = try trash(currentPath)
-                ops.append(op)
-                return ops // 文件已入废纸篓，后续动作无意义
-            case .dtImport, .dtRename, .dtAddTags, .dtMoveToGroup:
-                let dtOps = try await dtExecutor.execute(action, at: .local(path: currentPath))
-                ops.append(contentsOf: dtOps)
+            do {
+                switch action {
+                case .continueMatching:
+                    continue
+                case .llmExtractMetadata:
+                    metadata = try await metadataProvider.metadata(for: .local(path: currentPath))
+                case .moveTo(let destDir):
+                    let name = (currentPath as NSString).lastPathComponent
+                    let dest = dedupInDir(destDir, name: name)
+                    try move(from: currentPath, to: dest)
+                    ops.append(.moved(from: currentPath, to: dest))
+                    currentPath = dest
+                case .copyTo(let destDir):
+                    let name = (currentPath as NSString).lastPathComponent
+                    let dest = dedupInDir(destDir, name: name)
+                    try fileManager.copyItem(atPath: currentPath, toPath: dest)
+                    ops.append(.copied(to: dest))
+                case .rename(let template):
+                    let dest = pathResolver.resolveRename(inDirectoryOf: currentPath, template: template, metadata: metadata)
+                    try move(from: currentPath, to: dest)
+                    ops.append(.renamed(from: currentPath, to: dest))
+                    currentPath = dest
+                case .llmRename(let instruction):
+                    let dest = pathResolver.resolveRename(inDirectoryOf: currentPath, template: instruction, metadata: metadata)
+                    try move(from: currentPath, to: dest)
+                    ops.append(.renamed(from: currentPath, to: dest))
+                    currentPath = dest
+                case .addFinderTags(let tags):
+                    let op = try addFinderTags(tags, to: currentPath)
+                    ops.append(op)
+                case .moveToTrash:
+                    guard allowTrash else { throw ActionExecutionError.unsupportedAction("移到废纸篓（需经确认队列）") }
+                    let op = try trash(currentPath)
+                    ops.append(op)
+                    return ops // 文件已入废纸篓，后续动作无意义
+                case .dtImport, .dtRename, .dtAddTags, .dtMoveToGroup:
+                    let dtOps = try await dtExecutor.execute(action, at: .local(path: currentPath))
+                    ops.append(contentsOf: dtOps)
+                }
+            } catch {
+                // 若已有成功完成的可逆操作，包装为 PartialActionFailure 以便上层记入 Journal；
+                // 否则（尚未产生任何操作）原样抛出，保留即时失败的既有行为。
+                if ops.isEmpty { throw error }
+                throw PartialActionFailure(completedOps: ops, underlying: error)
             }
         }
         return ops
