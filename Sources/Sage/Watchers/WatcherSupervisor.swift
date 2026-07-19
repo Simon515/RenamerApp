@@ -7,12 +7,28 @@ public struct WatchedRoot: Sendable, Equatable, Hashable {
     public init(path: String, recursive: Bool) { self.path = path; self.recursive = recursive }
 }
 
-/// 监控总管：按当前规则集启停 FolderWatcher，事件转交 Coordinator。
+/// 监控总管：按当前规则集启停 FolderWatcher 与 DTWatcher，事件转交 Coordinator。
 public actor WatcherSupervisor {
     private let coordinator: Coordinator
     private var watchers: [FolderWatcher] = []
 
-    public init(coordinator: Coordinator) { self.coordinator = coordinator }
+    private let dtRunner: any AppleScriptRunning
+    private let dtIsRunning: @Sendable () -> Bool
+    private var dtAvailabilityHandler: (@Sendable (Bool) async -> Void)?
+    private var dtWatcher: DTWatcher?
+
+    public init(coordinator: Coordinator,
+                dtRunner: any AppleScriptRunning = NSAppleScriptRunner(),
+                dtIsRunning: @escaping @Sendable () -> Bool = DTAvailability.isRunning) {
+        self.coordinator = coordinator
+        self.dtRunner = dtRunner
+        self.dtIsRunning = dtIsRunning
+    }
+
+    /// DT 可用性变化回调（菜单栏提示用）。构造后注入，避免 AppModel init 循环引用。
+    public func setDTAvailabilityHandler(_ handler: @escaping @Sendable (Bool) async -> Void) {
+        dtAvailabilityHandler = handler
+    }
 
     /// 从启用的自动规则收集去重监控根（同 path 有递归则合并为递归）。
     public nonisolated static func watchedRoots(rules: [Rule]) -> [WatchedRoot] {
@@ -37,11 +53,24 @@ public actor WatcherSupervisor {
             watcher.start()
             watchers.append(watcher)
         }
+
+        let dtGroups = DTWatcher.watchedGroups(rules: rules)
+        if !dtGroups.isEmpty {
+            let handler = dtAvailabilityHandler
+            let watcher = DTWatcher(groups: dtGroups, runner: dtRunner,
+                                    isRunning: dtIsRunning,
+                                    onEvent: { event in _ = await coordinator.handle(event) },
+                                    onAvailabilityChange: handler)
+            await watcher.start()
+            dtWatcher = watcher
+        }
     }
 
     public func stopAll() async {
         for watcher in watchers { watcher.stop() }
         watchers.removeAll()
+        await dtWatcher?.stop()
+        dtWatcher = nil
     }
 
     public func restart(rules: [Rule]) async {

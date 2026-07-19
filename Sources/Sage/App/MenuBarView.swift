@@ -12,6 +12,11 @@ struct MenuBarView: View {
                 get: { app.settings.monitoringEnabled },
                 set: { on in Task { await app.setMonitoring(on) } }
             ))
+            if !app.dtAvailable {
+                Label("DEVONthink 未运行，相关规则已暂停", systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
             Divider()
             HStack {
                 Text("待确认")

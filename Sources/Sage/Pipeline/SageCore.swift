@@ -10,10 +10,13 @@ public struct SageCore {
 
     public static func makeDefault(supportDirectory: URL, gateway: LLMGateway) -> Assembled {
         let extraction = ExtractionProvider(gateway: gateway)
-        let engine = RuleEngine(provider: extraction)
+        let dtRunner = NSAppleScriptRunner()
+        let facts = DTFactsAdapter(local: extraction, runner: dtRunner)   // DT 位置条件可求值
+        let engine = RuleEngine(provider: facts)
         let metadataProvider = ExtractionMetadataProvider(extraction: extraction, gateway: gateway)
-        let executor = LocalActionExecutor(metadataProvider: metadataProvider)
-        let journal = Journal(directory: supportDirectory)
+        let dtActions = DTActions(runner: dtRunner)
+        let executor = LocalActionExecutor(metadataProvider: metadataProvider, dtExecutor: dtActions)
+        let journal = Journal(directory: supportDirectory, dtReverter: dtActions)
         let queue = ConfirmQueue(directory: supportDirectory)
         let store = RuleStore(directory: supportDirectory)
         let rulesProvider = RuleStoreRulesProvider(store: store)
