@@ -27,17 +27,38 @@ public actor LocalActionExecutor {
 
     private func execute(actions: [Action], on startLocation: FileLocation,
                          allowTrash: Bool) async throws -> [ReversibleOp] {
-        guard case .local(var currentPath) = startLocation else { throw ActionExecutionError.notLocalFile }
+        // DT 位置事件允许进入，但只允许 DT 动作与元数据提取；本地文件动作在对应分支拒绝
+        var currentPath: String
+        var currentDTLocation: FileLocation?
+        switch startLocation {
+        case .local(let path):
+            currentPath = path
+        case .devonthink:
+            currentPath = ""
+            currentDTLocation = startLocation
+        }
         var ops: [ReversibleOp] = []
         var metadata = ExtractedMetadata()
 
         for action in actions {
             do {
+                // 本地文件动作对 DT 位置事件一律拒绝
+                switch action {
+                case .moveTo, .copyTo, .rename, .llmRename, .addFinderTags, .moveToTrash:
+                    guard case .local = startLocation else { throw ActionExecutionError.notLocalFile }
+                default:
+                    break
+                }
                 switch action {
                 case .continueMatching:
                     continue
                 case .llmExtractMetadata:
-                    metadata = try await metadataProvider.metadata(for: .local(path: currentPath))
+                    // 本地事件用当前（可能已移动/改名的）路径；DT 位置事件用事件位置
+                    if case .local = startLocation {
+                        metadata = try await metadataProvider.metadata(for: .local(path: currentPath))
+                    } else {
+                        metadata = try await metadataProvider.metadata(for: startLocation)
+                    }
                 case .moveTo(let destDir):
                     let name = (currentPath as NSString).lastPathComponent
                     let dest = dedupInDir(destDir, name: name)
@@ -67,8 +88,22 @@ public actor LocalActionExecutor {
                     let op = try trash(currentPath)
                     ops.append(op)
                     return ops // 文件已入废纸篓，后续动作无意义
-                case .dtImport, .dtRename, .dtAddTags, .dtMoveToGroup:
-                    let dtOps = try await dtExecutor.execute(action, at: .local(path: currentPath))
+                case .dtImport(let database, let groupPath, let tags, let noteTemplate):
+                    guard case .local = startLocation else { throw DTError.needsLocalFile }
+                    let resolvedNote = noteTemplate.map { resolveNote($0, metadata: metadata) }
+                    let dtOps = try await dtExecutor.execute(
+                        .dtImport(database: database, groupPath: groupPath, tags: tags, noteTemplate: resolvedNote),
+                        at: .local(path: currentPath))
+                    ops.append(contentsOf: dtOps)
+                    // 记住导入产生的 DT 记录，供同一动作序列的后续 DT 动作作用
+                    if case .dtImported(let uuid, let db) = dtOps.first {
+                        currentDTLocation = .devonthink(uuid: uuid, database: db, groupPath: groupPath)
+                    }
+                case .dtRename, .dtAddTags, .dtMoveToGroup:
+                    guard let target = currentDTLocation else {
+                        throw ActionExecutionError.unsupportedAction("该 DEVONthink 动作需要先导入或作用于 DT 条目")
+                    }
+                    let dtOps = try await dtExecutor.execute(action, at: target)
                     ops.append(contentsOf: dtOps)
                 }
             } catch {
@@ -79,6 +114,14 @@ public actor LocalActionExecutor {
             }
         }
         return ops
+    }
+
+    /// 备注模板令牌直替（备注不是文件名，不做清洗）。
+    private func resolveNote(_ template: String, metadata: ExtractedMetadata) -> String {
+        template
+            .replacingOccurrences(of: "{summary}", with: metadata.summary ?? "")
+            .replacingOccurrences(of: "{title}", with: metadata.title ?? "")
+            .replacingOccurrences(of: "{category}", with: metadata.category ?? "")
     }
 
     private func move(from: String, to: String) throws {
