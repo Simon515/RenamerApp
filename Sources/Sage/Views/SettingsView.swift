@@ -29,5 +29,17 @@ struct SettingsView: View {
                 }
             }
         }
+        .alert("保存失败", isPresented: Binding(
+            get: { app.errorMessage != nil },
+            set: { if !$0 { app.errorMessage = nil } }
+        )) {
+            Button("好") { app.errorMessage = nil }
+        } message: { Text(app.errorMessage ?? "") }
+        .alert("已保存", isPresented: Binding(
+            get: { app.infoMessage != nil },
+            set: { if !$0 { app.infoMessage = nil } }
+        )) {
+            Button("好") { app.infoMessage = nil }
+        } message: { Text(app.infoMessage ?? "") }
     }
 }

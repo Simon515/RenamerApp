@@ -39,5 +39,22 @@ struct ContentView: View {
             await app.journal.reload()
             await app.refreshQueueBadge()
         }
+        .alert("出错了", isPresented: Binding(
+            get: { activeError != nil },
+            set: { if !$0 { clearErrors() } }
+        )) {
+            Button("好") { clearErrors() }
+        } message: { Text(activeError ?? "") }
+    }
+
+    /// 三个子视图模型中第一个非空的错误。
+    private var activeError: String? {
+        app.ruleList.errorMessage ?? app.confirmQueue.errorMessage ?? app.journal.errorMessage
+    }
+
+    private func clearErrors() {
+        app.ruleList.errorMessage = nil
+        app.confirmQueue.errorMessage = nil
+        app.journal.errorMessage = nil
     }
 }

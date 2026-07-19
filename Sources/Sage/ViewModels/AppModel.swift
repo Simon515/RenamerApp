@@ -18,6 +18,8 @@ public final class AppModel {
     public private(set) var pendingCount: Int = 0
     public private(set) var recentActivity: [ActivityEntry] = []
     public var errorMessage: String?
+    /// 非错误的提示信息（与 errorMessage 分开，避免互相覆盖）。
+    public var infoMessage: String?
 
     public let ruleList: RuleListModel
     public let confirmQueue: ConfirmQueueModel
@@ -59,7 +61,16 @@ public final class AppModel {
         let keychain = SageKeychainStore()
         let apiKey = (try? keychain.read(account: "llm-api-key")) ?? nil
         let gateway = Self.makeGateway(settings: settings, apiKey: apiKey ?? "")
-        return AppModel(supportDirectory: supportDirectory, settings: settings, gateway: gateway, keychain: keychain)
+        let model = AppModel(supportDirectory: supportDirectory, settings: settings, gateway: gateway, keychain: keychain)
+        await model.startInitialMonitoringIfEnabled()
+        return model
+    }
+
+    /// 启动时若监控开关为开，则按当前规则启动 watcher（否则自动规则永不生效直到手动切换）。
+    public func startInitialMonitoringIfEnabled() async {
+        guard settings.monitoringEnabled else { return }
+        let rules = await ruleList.currentRulesSnapshot()
+        await supervisor.restart(rules: rules)
     }
 
     private static func makeGateway(settings: SageSettings, apiKey: String) -> LLMGateway {
@@ -92,19 +103,43 @@ public final class AppModel {
     public func setMonitoring(_ on: Bool) async {
         settings.monitoringEnabled = on
         await persistSettings()
+        await reconcileMonitoring()
+    }
+
+    /// 按当前 settings.monitoringEnabled 启停 watcher。
+    private func reconcileMonitoring() async {
         let rules = await ruleList.currentRulesSnapshot()
-        if on { await supervisor.restart(rules: rules) } else { await supervisor.stopAll() }
+        if settings.monitoringEnabled { await supervisor.restart(rules: rules) }
+        else { await supervisor.stopAll() }
     }
 
     public func applySettings(_ new: SageSettings, apiKey: String?) async {
+        let monitoringChanged = new.monitoringEnabled != settings.monitoringEnabled
+        let launchChanged = new.launchAtLogin != settings.launchAtLogin
         settings = new
-        if let apiKey { try? keychain.write(account: "llm-api-key", value: apiKey) }
-        await persistSettings()
-        errorMessage = "部分设置（LLM 端点/密钥）将在下次启动后完全生效。"
+        errorMessage = nil
+        infoMessage = nil
+
+        if let apiKey {
+            do { try keychain.write(account: "llm-api-key", value: apiKey) }
+            catch {
+                errorMessage = "API Key 写入 Keychain 失败：\(error.localizedDescription)"
+                return
+            }
+        }
+        do { try await settingsStore.save(settings) }
+        catch {
+            errorMessage = "设置保存失败：\(error.localizedDescription)"
+            return
+        }
+        if launchChanged { LaunchAtLogin.set(new.launchAtLogin) }
+        if monitoringChanged { await reconcileMonitoring() }
+        infoMessage = "LLM 端点/密钥变更将在下次启动后完全生效。"
     }
 
     private func persistSettings() async {
-        do { try await settingsStore.save(settings) } catch { errorMessage = error.localizedDescription }
+        do { try await settingsStore.save(settings); errorMessage = nil }
+        catch { errorMessage = error.localizedDescription }
     }
 
     private func pushActivity(_ text: String) {

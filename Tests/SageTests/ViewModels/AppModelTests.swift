@@ -42,6 +42,33 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(reloaded.monitoringEnabled)
     }
 
+    func test应用设置成功用信息通道而非错误通道() async throws {
+        let model = makeModel()
+        var new = model.settings
+        new.provider.model = "gpt-x"
+        await model.applySettings(new, apiKey: nil)
+        XCTAssertNil(model.errorMessage)          // 成功不应写错误通道
+        XCTAssertNotNil(model.infoMessage)        // 提示走独立信息通道
+        let reloaded = try await SettingsStore(directory: dir).load()
+        XCTAssertEqual(reloaded.provider.model, "gpt-x")
+    }
+
+    func test应用设置切换监控落盘() async throws {
+        let model = makeModel()
+        var new = model.settings
+        new.monitoringEnabled = false
+        await model.applySettings(new, apiKey: nil)
+        XCTAssertFalse(model.settings.monitoringEnabled)
+        let reloaded = try await SettingsStore(directory: dir).load()
+        XCTAssertFalse(reloaded.monitoringEnabled)
+    }
+
+    func test启动时按监控开关不崩溃() async throws {
+        let model = makeModel()   // 默认 monitoringEnabled == true，无规则
+        await model.startInitialMonitoringIfEnabled()
+        XCTAssertTrue(model.settings.monitoringEnabled)
+    }
+
     func test活动文本映射() {
         let rec = JournalRecord(id: UUID(), timestamp: Date(), ruleID: UUID(), ruleName: "R",
                                 sourceDescription: "/a.pdf", ops: [])
