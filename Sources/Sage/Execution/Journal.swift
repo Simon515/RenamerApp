@@ -55,6 +55,8 @@ public actor Journal {
         try load().records.sorted { $0.timestamp > $1.timestamp }
     }
 
+    /// 注意：中途失败时记录保留（供重试/排查），但已回滚的 op 不回补——
+    /// 重试会对已回滚步骤重复反做（DT 删除重放、moveBack 源缺失），由各步自身报错兜底。
     public func rollback(id: UUID) async throws {
         var file = try load()
         guard let index = file.records.firstIndex(where: { $0.id == id }) else {
