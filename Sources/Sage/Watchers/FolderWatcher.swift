@@ -46,6 +46,7 @@ public final class FolderWatcher: FileEventSource, @unchecked Sendable {
     }
 
     public func start() {
+        guard stream == nil else { return }
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
                                            retain: nil, release: nil, copyDescription: nil)
         let callback: FSEventStreamCallback = { _, info, count, paths, flags, _ in
@@ -68,7 +69,7 @@ public final class FolderWatcher: FileEventSource, @unchecked Sendable {
                 }
             }
         }
-        let flags = UInt32(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer)
+        let flags = UInt32(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagUseCFTypes)
         stream = FSEventStreamCreate(kCFAllocatorDefault, callback, &context,
                                      roots as CFArray, FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
                                      0.5, flags)
