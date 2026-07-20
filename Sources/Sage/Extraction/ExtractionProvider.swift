@@ -55,24 +55,30 @@ public actor ExtractionProvider: FactsProvider {
 
     public func belongsTo(category: String, at location: FileLocation) async throws -> SemanticVerdict {
         let facts = try await extractedFacts(for: location)
-        let text = facts.text ?? ""
-        let request = LLMPrompts.belongsTo(category: category, text: text)
         let hash = facts.contentHash ?? "nohash:\(cacheKey(for: location))"
-        let cacheKey = "\(hash):belongsTo:\(category)"
+        return try await belongsTo(category: category, text: facts.text ?? "", cacheKey: hash)
+    }
+
+    /// 用外部提供的文本做语义判定（DT 位置经 DTFactsAdapter 调用）。
+    public func belongsTo(category: String, text: String, cacheKey hash: String) async throws -> SemanticVerdict {
+        let request = LLMPrompts.belongsTo(category: category, text: text)
         return try await gateway.semanticVerdict(prompt: request.systemPrompt,
                                                   userPrompt: request.userPrompt,
-                                                  cacheKey: cacheKey)
+                                                  cacheKey: "\(hash):belongsTo:\(category)")
     }
 
     public func matchesDescription(_ description: String, at location: FileLocation) async throws -> SemanticVerdict {
         let facts = try await extractedFacts(for: location)
-        let text = facts.text ?? ""
-        let request = LLMPrompts.matchesDescription(description: description, text: text)
         let hash = facts.contentHash ?? "nohash:\(cacheKey(for: location))"
-        let cacheKey = "\(hash):matches:\(description)"
+        return try await matchesDescription(description, text: facts.text ?? "", cacheKey: hash)
+    }
+
+    /// 用外部提供的文本做语义判定（DT 位置经 DTFactsAdapter 调用）。
+    public func matchesDescription(_ description: String, text: String, cacheKey hash: String) async throws -> SemanticVerdict {
+        let request = LLMPrompts.matchesDescription(description: description, text: text)
         return try await gateway.semanticVerdict(prompt: request.systemPrompt,
                                                   userPrompt: request.userPrompt,
-                                                  cacheKey: cacheKey)
+                                                  cacheKey: "\(hash):matches:\(description)")
     }
 
     private func cacheKey(for location: FileLocation) -> String {

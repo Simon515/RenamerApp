@@ -42,6 +42,10 @@ public final class JournalModel {
         case .renamed(let from, let to): return "重命名 \(from) → \(to)"
         case .trashed(let originalPath, _): return "移到废纸篓 \(originalPath)"
         case .addedFinderTags(let tags, let path, _): return "加标签 \(tags.joined(separator: "、")) 于 \(path)"
+        case .dtImported(_, let database): return "已导入 DEVONthink：\(database)（回滚=删除该记录）"
+        case .dtRenamed(_, let from, let to): return "DEVONthink 内 \(from) → \(to)"
+        case .dtAddedTags(let tags, _, _): return "DEVONthink 加标签 \(tags.joined(separator: "、"))"
+        case .dtMoved(_, _, let fromGroup, _, let toGroup): return "DEVONthink \(fromGroup) → \(toGroup)"
         }
     }
 }

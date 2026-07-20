@@ -21,16 +21,24 @@ public enum JournalError: LocalizedError {
     }
 }
 
+/// DT 操作的回滚执行（真实实现为 DTActions；nil 表示 DT 回滚不可用）。
+public protocol DTReverting: Sendable {
+    func revert(_ op: ReversibleOp) async throws
+}
+
 /// 操作日志（actor：串行读写 + 回滚）。
 public actor Journal {
     private let fileURL: URL
     private let fileManager: FileManager
     private let maxRecords: Int
+    private let dtReverter: (any DTReverting)?
 
-    public init(directory: URL, fileManager: FileManager = .default, maxRecords: Int = 500) {
+    public init(directory: URL, fileManager: FileManager = .default, maxRecords: Int = 500,
+                dtReverter: (any DTReverting)? = nil) {
         self.fileURL = directory.appendingPathComponent("journal.json")
         self.fileManager = fileManager
         self.maxRecords = maxRecords
+        self.dtReverter = dtReverter
     }
 
     public func append(_ record: JournalRecord) throws {
@@ -47,17 +55,30 @@ public actor Journal {
         try load().records.sorted { $0.timestamp > $1.timestamp }
     }
 
-    public func rollback(id: UUID) throws {
-        var file = try load()
+    /// 注意：中途失败时记录保留（供重试/排查），但已回滚的 op 不回补——
+    /// 重试会对已回滚步骤重复反做（DT 删除重放、moveBack 源缺失），由各步自身报错兜底。
+    public func rollback(id: UUID) async throws {
+        let file = try load()
         guard let index = file.records.firstIndex(where: { $0.id == id }) else {
             throw JournalError.recordNotFound
         }
         let record = file.records[index]
         for op in record.ops.reversed() {
-            try revert(op)
+            switch op {
+            case .dtImported, .dtRenamed, .dtAddedTags, .dtMoved:
+                guard let dtReverter else {
+                    throw JournalError.rollbackFailed("DEVONthink 回滚不可用")
+                }
+                try await dtReverter.revert(op)
+            default:
+                try revert(op)
+            }
         }
-        file.records.remove(at: index)
-        try save(file)
+        // DT 回滚可能耗时数秒，且存在写同一文件的兄弟 Journal 实例——
+        // 保存前重新加载，避免用旧快照覆盖期间新追加的记录
+        var fresh = try load()
+        fresh.records.removeAll { $0.id == id }
+        try save(fresh)
     }
 
     private func revert(_ op: ReversibleOp) throws {
@@ -73,6 +94,9 @@ public actor Journal {
             // `URLResourceValues.tagNames` 的 setter 在 macOS 26 之前不可用，
             // 故直接写 `com.apple.metadata:_kMDItemUserTags`（与 LocalActionExecutor 一致，兼容 macOS 14+）。
             try? writeFinderTags(previous, to: path)
+        case .dtImported, .dtRenamed, .dtAddedTags, .dtMoved:
+            // DT 操作在 rollback(id:) 中已分派给 dtReverter，不应到达此处
+            throw JournalError.rollbackFailed("内部错误：DT 操作应由 dtReverter 处理")
         }
     }
 

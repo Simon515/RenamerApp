@@ -12,6 +12,40 @@ struct RuleEditorView: View {
 
             Form {
                 TextField("名称", text: $model.draft.name)
+                Section("作用域") {
+                    ForEach(Array(model.draft.scopes.enumerated()), id: \.offset) { idx, scope in
+                        HStack {
+                            if case .devonthink(let db, let group) = scope {
+                                TextField("数据库", text: Binding(
+                                    get: { db },
+                                    set: { setScope(idx, .devonthink(database: $0, groupPath: group)) }))
+                                TextField("组路径（/开头）", text: Binding(
+                                    get: { group },
+                                    set: { setScope(idx, .devonthink(database: db, groupPath: $0)) }))
+                            } else {
+                                Text(Self.scopeLabel(scope)).lineLimit(1)
+                            }
+                            Spacer()
+                            Button(role: .destructive) { model.draft.scopes.remove(at: idx) } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                    Menu("添加作用域") {
+                        Button("本地文件夹…") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseDirectories = true; panel.canChooseFiles = false
+                            if panel.runModal() == .OK, let url = panel.url {
+                                model.draft.scopes.append(.localFolder(path: url.path, recursive: true))
+                            }
+                        }
+                        Button("DEVONthink 组") {
+                            model.draft.scopes.append(.devonthink(database: "数据库名", groupPath: "/收件箱"))
+                        }
+                        Button("仅手动") { model.draft.scopes.append(.manualOnly) }
+                    }
+                }
                 Picker("触发", selection: $model.draft.trigger) {
                     Text("监控自动").tag(TriggerMode.automatic)
                     Text("仅手动").tag(TriggerMode.manualOnly)
@@ -25,12 +59,12 @@ struct RuleEditorView: View {
                     Text("任一满足").tag(ConditionLogic.any)
                 }
             }
-            .frame(height: 130)
+            .frame(minHeight: 130, maxHeight: 280)
 
             GroupBox("动作（按序执行）") {
                 ForEach(Array(model.draft.actions.enumerated()), id: \.offset) { idx, action in
-                    HStack {
-                        Text(RuleEditorModel.describe(action))
+                    HStack(alignment: .top) {
+                        actionRow(idx: idx, action: action)
                         Spacer()
                         Button(role: .destructive) { model.removeAction(at: idx) } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless)
@@ -41,6 +75,13 @@ struct RuleEditorView: View {
                     Button("重命名（模板）") { model.addAction(.rename(template: "{title}")) }
                     Button("用 LLM 提取元数据 ✦") { model.addAction(.llmExtractMetadata) }
                     Button("移到废纸篓（需确认）") { model.addAction(.moveToTrash) }
+                    Divider()
+                    Button("导入 DEVONthink…") {
+                        model.addAction(.dtImport(database: "数据库名", groupPath: "/收件箱", tags: [], noteTemplate: nil))
+                    }
+                    Button("DEVONthink 内重命名") { model.addAction(.dtRename(template: "{title}")) }
+                    Button("DEVONthink 加标签") { model.addAction(.dtAddTags(["标签"])) }
+                    Button("DEVONthink 移动到组") { model.addAction(.dtMoveToGroup(database: "数据库名", groupPath: "/已归档")) }
                 }
             }
 
@@ -64,5 +105,78 @@ struct RuleEditorView: View {
         }
         .padding(20)
         .frame(minWidth: 480, minHeight: 460)
+    }
+
+    /// 行删除与失焦提交可能竞态（offset 标识的 ForEach）：越界写一律丢弃。
+    private func setScope(_ idx: Int, _ scope: RuleScope) {
+        guard idx < model.draft.scopes.count else { return }
+        model.draft.scopes[idx] = scope
+    }
+
+    private func setAction(_ idx: Int, _ action: Action) {
+        guard idx < model.draft.actions.count else { return }
+        model.draft.actions[idx] = action
+    }
+
+    /// DT 动作就地参数编辑；其余动作显示描述文本。
+    @ViewBuilder
+    private func actionRow(idx: Int, action: Action) -> some View {
+        switch action {
+        case .dtImport(let db, let group, let tags, let note):
+            VStack(alignment: .leading) {
+                Text("导入 DEVONthink").font(.caption).foregroundStyle(.secondary)
+                TextField("数据库", text: Binding(
+                    get: { db },
+                    set: { setAction(idx, .dtImport(database: $0, groupPath: group, tags: tags, noteTemplate: note)) }))
+                TextField("组路径", text: Binding(
+                    get: { group },
+                    set: { setAction(idx, .dtImport(database: db, groupPath: $0, tags: tags, noteTemplate: note)) }))
+                TextField("标签（逗号分隔）", text: Binding(
+                    get: { tags.joined(separator: ",") },
+                    set: { setAction(idx, .dtImport(database: db, groupPath: group,
+                        tags: $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
+                        noteTemplate: note)) }))
+                TextField("备注模板（可用 {summary}）", text: Binding(
+                    get: { note ?? "" },
+                    set: { setAction(idx, .dtImport(database: db, groupPath: group, tags: tags,
+                        noteTemplate: $0.isEmpty ? nil : $0)) }))
+            }
+        case .dtRename(let template):
+            VStack(alignment: .leading) {
+                Text("DEVONthink 内重命名").font(.caption).foregroundStyle(.secondary)
+                TextField("名称模板", text: Binding(
+                    get: { template },
+                    set: { setAction(idx, .dtRename(template: $0)) }))
+            }
+        case .dtAddTags(let tags):
+            VStack(alignment: .leading) {
+                Text("DEVONthink 加标签").font(.caption).foregroundStyle(.secondary)
+                TextField("标签（逗号分隔）", text: Binding(
+                    get: { tags.joined(separator: ",") },
+                    set: { setAction(idx, .dtAddTags(
+                        $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })) }))
+            }
+        case .dtMoveToGroup(let db, let group):
+            VStack(alignment: .leading) {
+                Text("DEVONthink 移动到组").font(.caption).foregroundStyle(.secondary)
+                TextField("数据库", text: Binding(
+                    get: { db },
+                    set: { setAction(idx, .dtMoveToGroup(database: $0, groupPath: group)) }))
+                TextField("组路径", text: Binding(
+                    get: { group },
+                    set: { setAction(idx, .dtMoveToGroup(database: db, groupPath: $0)) }))
+            }
+        default:
+            Text(RuleEditorModel.describe(action))
+        }
+    }
+
+    static func scopeLabel(_ scope: RuleScope) -> String {
+        switch scope {
+        case .localFolder(let path, let recursive):
+            return "\((path as NSString).lastPathComponent)\(recursive ? "（含子目录）" : "")"
+        case .devonthink(let db, let group): return "DT：\(db)\(group)"
+        case .manualOnly: return "仅手动"
+        }
     }
 }

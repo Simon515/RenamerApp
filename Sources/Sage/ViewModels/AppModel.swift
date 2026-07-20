@@ -20,6 +20,8 @@ public final class AppModel {
     public var errorMessage: String?
     /// 非错误的提示信息（与 errorMessage 分开，避免互相覆盖）。
     public var infoMessage: String?
+    /// DEVONthink 是否可用（仅在有 DT 监控组时更新；未运行 → 菜单栏提示，spec §5）。
+    public private(set) var dtAvailable: Bool = true
 
     public let ruleList: RuleListModel
     public let confirmQueue: ConfirmQueueModel
@@ -46,7 +48,8 @@ public final class AppModel {
         self.manualIntake = assembled.manualIntake
         let store = RuleStore(directory: supportDirectory)
         self.queue = ConfirmQueue(directory: supportDirectory)
-        let journalActor = Journal(directory: supportDirectory)
+        // UI 侧 Journal 兄弟实例也要能回滚 DT 操作
+        let journalActor = Journal(directory: supportDirectory, dtReverter: DTActions())
 
         self.ruleList = RuleListModel(store: store)
         self.confirmQueue = ConfirmQueueModel(queue: queue, coordinator: coordinator)
@@ -62,9 +65,19 @@ public final class AppModel {
         let apiKey = (try? keychain.read(account: "llm-api-key")) ?? nil
         let gateway = Self.makeGateway(settings: settings, apiKey: apiKey ?? "")
         let model = AppModel(supportDirectory: supportDirectory, settings: settings, gateway: gateway, keychain: keychain)
+        await model.wireDTAvailability()
         await model.startInitialMonitoringIfEnabled()
         return model
     }
+
+    /// 把 DT 可用性变化接到 UI 状态（bootstrap 后调用，避免 init 内 self 逃逸）。
+    public func wireDTAvailability() async {
+        await supervisor.setDTAvailabilityHandler { [weak self] available in
+            await MainActor.run { self?.markDTAvailability(available) }
+        }
+    }
+
+    public func markDTAvailability(_ available: Bool) { dtAvailable = available }
 
     /// 启动时若监控开关为开，则按当前规则启动 watcher（否则自动规则永不生效直到手动切换）。
     public func startInitialMonitoringIfEnabled() async {
