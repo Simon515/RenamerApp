@@ -178,3 +178,17 @@ RollbackService.save ──► 持久化记录（最多保留 50 条）
 - 新增命名令牌：在 `NamingEngine.resolve(_:analysis:)` 中处理，并注意 `sanitize` 对路径分隔符的保留语义。
 - 新增导出目标：实现 `ExportPlugin` 并注册到 `PluginManager`，同时扩展 `ExportTarget`。
 - 修改文件系统写入逻辑后，补充测试或手动验证大目录、重名文件、目标已存在等边界。
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub (`Simon515/RenamerApp`), via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical roles, label string equal to role name (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

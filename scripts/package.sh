@@ -32,7 +32,7 @@ if [[ ! -f "$BIN_PATH" ]]; then
     exit 1
 fi
 
-echo "==> 组装 $APP_NAME.app（版本 $VERSION）"
+echo "==> 组装 ${APP_NAME}.app（版本 ${VERSION}）"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
