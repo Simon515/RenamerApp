@@ -18,10 +18,10 @@ struct RuleEditorView: View {
                             if case .devonthink(let db, let group) = scope {
                                 TextField("数据库", text: Binding(
                                     get: { db },
-                                    set: { model.draft.scopes[idx] = .devonthink(database: $0, groupPath: group) }))
+                                    set: { setScope(idx, .devonthink(database: $0, groupPath: group)) }))
                                 TextField("组路径（/开头）", text: Binding(
                                     get: { group },
-                                    set: { model.draft.scopes[idx] = .devonthink(database: db, groupPath: $0) }))
+                                    set: { setScope(idx, .devonthink(database: db, groupPath: $0)) }))
                             } else {
                                 Text(Self.scopeLabel(scope)).lineLimit(1)
                             }
@@ -107,6 +107,17 @@ struct RuleEditorView: View {
         .frame(minWidth: 480, minHeight: 460)
     }
 
+    /// 行删除与失焦提交可能竞态（offset 标识的 ForEach）：越界写一律丢弃。
+    private func setScope(_ idx: Int, _ scope: RuleScope) {
+        guard idx < model.draft.scopes.count else { return }
+        model.draft.scopes[idx] = scope
+    }
+
+    private func setAction(_ idx: Int, _ action: Action) {
+        guard idx < model.draft.actions.count else { return }
+        model.draft.actions[idx] = action
+    }
+
     /// DT 动作就地参数编辑；其余动作显示描述文本。
     @ViewBuilder
     private func actionRow(idx: Int, action: Action) -> some View {
@@ -116,44 +127,44 @@ struct RuleEditorView: View {
                 Text("导入 DEVONthink").font(.caption).foregroundStyle(.secondary)
                 TextField("数据库", text: Binding(
                     get: { db },
-                    set: { model.draft.actions[idx] = .dtImport(database: $0, groupPath: group, tags: tags, noteTemplate: note) }))
+                    set: { setAction(idx, .dtImport(database: $0, groupPath: group, tags: tags, noteTemplate: note)) }))
                 TextField("组路径", text: Binding(
                     get: { group },
-                    set: { model.draft.actions[idx] = .dtImport(database: db, groupPath: $0, tags: tags, noteTemplate: note) }))
+                    set: { setAction(idx, .dtImport(database: db, groupPath: $0, tags: tags, noteTemplate: note)) }))
                 TextField("标签（逗号分隔）", text: Binding(
                     get: { tags.joined(separator: ",") },
-                    set: { model.draft.actions[idx] = .dtImport(database: db, groupPath: group,
+                    set: { setAction(idx, .dtImport(database: db, groupPath: group,
                         tags: $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
-                        noteTemplate: note) }))
+                        noteTemplate: note)) }))
                 TextField("备注模板（可用 {summary}）", text: Binding(
                     get: { note ?? "" },
-                    set: { model.draft.actions[idx] = .dtImport(database: db, groupPath: group, tags: tags,
-                        noteTemplate: $0.isEmpty ? nil : $0) }))
+                    set: { setAction(idx, .dtImport(database: db, groupPath: group, tags: tags,
+                        noteTemplate: $0.isEmpty ? nil : $0)) }))
             }
         case .dtRename(let template):
             VStack(alignment: .leading) {
                 Text("DEVONthink 内重命名").font(.caption).foregroundStyle(.secondary)
                 TextField("名称模板", text: Binding(
                     get: { template },
-                    set: { model.draft.actions[idx] = .dtRename(template: $0) }))
+                    set: { setAction(idx, .dtRename(template: $0)) }))
             }
         case .dtAddTags(let tags):
             VStack(alignment: .leading) {
                 Text("DEVONthink 加标签").font(.caption).foregroundStyle(.secondary)
                 TextField("标签（逗号分隔）", text: Binding(
                     get: { tags.joined(separator: ",") },
-                    set: { model.draft.actions[idx] = .dtAddTags(
-                        $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }) }))
+                    set: { setAction(idx, .dtAddTags(
+                        $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })) }))
             }
         case .dtMoveToGroup(let db, let group):
             VStack(alignment: .leading) {
                 Text("DEVONthink 移动到组").font(.caption).foregroundStyle(.secondary)
                 TextField("数据库", text: Binding(
                     get: { db },
-                    set: { model.draft.actions[idx] = .dtMoveToGroup(database: $0, groupPath: group) }))
+                    set: { setAction(idx, .dtMoveToGroup(database: $0, groupPath: group)) }))
                 TextField("组路径", text: Binding(
                     get: { group },
-                    set: { model.draft.actions[idx] = .dtMoveToGroup(database: db, groupPath: $0) }))
+                    set: { setAction(idx, .dtMoveToGroup(database: db, groupPath: $0)) }))
             }
         default:
             Text(RuleEditorModel.describe(action))

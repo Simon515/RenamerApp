@@ -7,6 +7,18 @@ private actor SpyReverter: DTReverting {
     func all() -> [ReversibleOp] { reverted }
 }
 
+/// revert 期间经兄弟 Journal 实例向同一文件追加一条新记录（模拟并发执行落盘）。
+private actor AppendDuringRevert: DTReverting {
+    private let directory: URL
+    init(directory: URL) { self.directory = directory }
+    func revert(_ op: ReversibleOp) async throws {
+        let sibling = Journal(directory: directory)
+        try await sibling.append(JournalRecord(
+            id: UUID(), timestamp: Date(), ruleID: UUID(), ruleName: "并发新记录",
+            sourceDescription: "/b.pdf", ops: [.copied(to: "/b-copy.pdf")]))
+    }
+}
+
 final class JournalDTRollbackTests: XCTestCase {
     private var dir: URL!
     override func setUpWithError() throws {
@@ -31,6 +43,20 @@ final class JournalDTRollbackTests: XCTestCase {
         XCTAssertEqual(seen.last, .dtImported(uuid: "U1", database: "D"))
         let remaining = try await journal.all()
         XCTAssertTrue(remaining.isEmpty)
+    }
+
+    func testDT回滚期间兄弟实例追加的记录不丢失() async throws {
+        // DT revert 耗时窗口内另一 Journal 实例写入同一文件 → 保存前须重载
+        let siblingDir = dir!
+        let slowReverter = AppendDuringRevert(directory: siblingDir)
+        let journal = Journal(directory: dir, dtReverter: slowReverter)
+        let rec = JournalRecord(id: UUID(), timestamp: Date(), ruleID: UUID(), ruleName: "R",
+                                sourceDescription: "/a.pdf",
+                                ops: [.dtImported(uuid: "U1", database: "D")])
+        try await journal.append(rec)
+        try await journal.rollback(id: rec.id)
+        let remaining = try await journal.all()
+        XCTAssertEqual(remaining.map(\.ruleName), ["并发新记录"], "回滚期间追加的记录被旧快照覆盖丢失")
     }
 
     func test无DTReverter时DT操作回滚报错且记录保留() async throws {

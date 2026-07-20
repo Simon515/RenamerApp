@@ -58,7 +58,7 @@ public actor Journal {
     /// 注意：中途失败时记录保留（供重试/排查），但已回滚的 op 不回补——
     /// 重试会对已回滚步骤重复反做（DT 删除重放、moveBack 源缺失），由各步自身报错兜底。
     public func rollback(id: UUID) async throws {
-        var file = try load()
+        let file = try load()
         guard let index = file.records.firstIndex(where: { $0.id == id }) else {
             throw JournalError.recordNotFound
         }
@@ -74,8 +74,11 @@ public actor Journal {
                 try revert(op)
             }
         }
-        file.records.remove(at: index)
-        try save(file)
+        // DT 回滚可能耗时数秒，且存在写同一文件的兄弟 Journal 实例——
+        // 保存前重新加载，避免用旧快照覆盖期间新追加的记录
+        var fresh = try load()
+        fresh.records.removeAll { $0.id == id }
+        try save(fresh)
     }
 
     private func revert(_ op: ReversibleOp) throws {
